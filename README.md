@@ -22,7 +22,7 @@
 Run this command on a fresh Ubuntu/Debian VPS with root or `sudo` access:
 
 ```bash
-curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/nmronion-alt/OMCP-PANEL/main/omcp-menu.sh" -o /tmp/omcp-menu.sh && sudo bash /tmp/omcp-menu.sh
+curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main/omcp-menu.sh" -o /tmp/omcp-menu.sh && sudo bash /tmp/omcp-menu.sh
 ```
 
 The installer opens an interactive IPv4 / Non-IPv4 menu. In IPv4 mode, both the VPS public IPv4 and the configured panel domain are accepted by the reverse proxy; a domain can receive HTTPS through Let's Encrypt, while IP-only access uses HTTP. Minecraft connection addresses are generated from the configured domain or VPS IPv4 plus the port selected for each server. No port is entered in the Minecraft host setup.
@@ -32,7 +32,7 @@ The installer opens an interactive IPv4 / Non-IPv4 menu. In IPv4 mode, both the 
 Open the latest menu (the menu is downloaded fresh from GitHub each time):
 
 ```bash
-curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/nmronion-alt/OMCP-PANEL/main/omcp-menu.sh" -o /tmp/omcp-menu.sh && sudo bash /tmp/omcp-menu.sh
+curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main/omcp-menu.sh" -o /tmp/omcp-menu.sh && sudo bash /tmp/omcp-menu.sh
 ```
 
 Choose **IPv4 Mode** or **Non-IPv4 Mode**, then select **[5] Update OMCP**. The updater downloads the latest panel code from the GitHub `main` branch, validates it, makes a rollback backup of `/opt/omcp`, replaces the application files and restarts the OMCP agent. It does not delete or overwrite `/var/lib/omcp`, so Minecraft servers, worlds, plugins, backups, users and configuration remain in place.
@@ -40,7 +40,7 @@ Choose **IPv4 Mode** or **Non-IPv4 Mode**, then select **[5] Update OMCP**. The 
 You can also run the updater directly:
 
 ```bash
-curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/nmronion-alt/OMCP-PANEL/main/update-omcp.sh" -o /tmp/update-omcp.sh && sudo bash /tmp/update-omcp.sh
+curl -fL --retry 3 --retry-all-errors "https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main/update-omcp.sh" -o /tmp/update-omcp.sh && sudo bash /tmp/update-omcp.sh
 ```
 
 
