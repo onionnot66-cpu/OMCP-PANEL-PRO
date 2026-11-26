@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 # OMCP installer for Ubuntu/Debian. Supports systemd VPS and no-systemd shells.
-REPO="https://raw.githubusercontent.com/nmronion-alt/OMCP-PANEL/main"
+REPO="https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main"
 APP="/opt/omcp"
 DATA="/var/lib/omcp"
 MODE="${OMCP_INSTALL_MODE:-nonipv4}"
