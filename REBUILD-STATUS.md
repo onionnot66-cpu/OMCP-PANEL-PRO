@@ -9,19 +9,22 @@ power controls, polling console and command input, file browsing/editing,
 SFTP credential generation, admin backup listing/creation, runtime settings,
 admin user listing/creation, node inventory.
 
-Access control: administrators can manage the installation. Non-administrators
-can list/access only explicitly owned servers. Existing unowned servers remain
-administrator-only. Global backup listing is administrator-only pending a scoped
-backup API. Server creation is administrator-only. Denials currently return 401.
+Access control: administrators can manage the installation. Owners have full
+server access. Owners can assign panel users a validated permission set for
+console, power, files, backups, settings, players, plugins, SFTP and subuser
+management. Existing unowned servers remain administrator-only. Global backup
+listing and server creation are administrator-only. Security-relevant server
+actions are appended to an audit log. Denials currently return 401.
 
-Not implemented in this rebuild: remote connector, subuser permission matrix,
+Not implemented in this rebuild: remote connector, subuser management UI,
 two-factor authentication, email password recovery, database provisioning,
 scheduled power/command tasks, allocation management, egg templates, transfers,
 full audit log, complete file upload/download/archive UI, backup restore UI,
 branding editor, user edit/delete UI, and complete Pterodactyl feature parity.
 
 Validation: `python3 tests/test_access.py` starts an isolated real HTTP agent and
-checks anonymous denial, owner isolation, cross-user file denial, admin-only
-resources, and automatic local node. JavaScript and Python syntax checked.
+checks anonymous denial, owner isolation, cross-user file denial, permission-
+scoped subuser access, audit events, admin-only resources, and automatic local
+node. JavaScript and Python syntax checked.
 Live Minecraft startup, SFTP handshake, browser visual QA and VPS installation
 have not yet been verified. This branch is not a production release.

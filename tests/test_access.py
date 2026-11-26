@@ -40,9 +40,14 @@ class AccessTests(unittest.TestCase):
         cls.admin = result['token']
         cls.call('/api/users', cls.admin, {'username': 'alice',
             'email': 'alice@example.test', 'password': 'test-only-password-456'})
+        cls.call('/api/users', cls.admin, {'username': 'bob',
+            'email': 'bob@example.test', 'password': 'test-only-password-789'})
         _, result = cls.call('/api/login', data={'username': 'alice',
             'password': 'test-only-password-456'})
         cls.user = result['token']
+        _, result = cls.call('/api/login', data={'username': 'bob',
+            'password': 'test-only-password-789'})
+        cls.bob = result['token']
         for sid, owner in [('aaaaaaaa', 'alice'), ('bbbbbbbb', 'administrator')]:
             folder = cls.root / 'servers' / sid
             folder.mkdir()
@@ -82,6 +87,17 @@ class AccessTests(unittest.TestCase):
         node = self.call('/api/admin/metadata', self.admin)[1]['nodes'][0]
         self.assertEqual(node['id'], 'local')
         self.assertFalse(node['connectorRequired'])
+
+    def test_subuser_permissions_and_audit(self):
+        status, result = self.call('/api/servers/aaaaaaaa/subusers', self.user,
+            {'username': 'bob', 'permissions': ['files.read']})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self.call('/api/servers/aaaaaaaa/files?path=hello.txt', self.bob)[1]['content'], 'private content')
+        self.assertEqual(self.call('/api/servers/aaaaaaaa/start', self.bob, {})[0], 401)
+        listed = self.call('/api/servers', self.bob)[1]['servers']
+        self.assertEqual([s['id'] for s in listed], ['aaaaaaaa'])
+        events = self.call('/api/admin/audit', self.admin)[1]['events']
+        self.assertEqual(events[0]['action'], 'server.subuser.saved')
 
     @classmethod
     def tearDownClass(cls):

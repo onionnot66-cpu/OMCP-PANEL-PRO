@@ -15,6 +15,7 @@ HOST=os.environ.get("OMCP_HOST","127.0.0.1"); PORT=int(os.environ.get("OMCP_PORT
 ROOT.mkdir(parents=True,exist_ok=True); SERVERS.mkdir(parents=True,exist_ok=True)
 DEPLOYMENT_FILE=ROOT/"deployment.json"
 NETWORK_FILE=ROOT/"network.json"
+AUDIT_FILE=ROOT/"audit.jsonl"
 
 def read_config_file(path, default):
     try:
@@ -101,6 +102,32 @@ def password_hash(password, salt=None):
     digest=__import__("hashlib").pbkdf2_hmac("sha256",password.encode(),salt,310000)
     import base64
     return {"salt":base64.b64encode(salt).decode(),"hash":base64.b64encode(digest).decode(),"iterations":310000}
+
+def audit(actor, action, target="", details=None):
+    record={"time":int(time.time()),"actor":str(actor or "system"),"action":action,"target":target,"details":details or {}}
+    fd=os.open(AUDIT_FILE,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
+    try: os.write(fd,(json.dumps(record,separators=(",",":"))+"\n").encode())
+    finally: os.close(fd)
+
+def audit_events(limit=100):
+    if not AUDIT_FILE.exists(): return []
+    out=[]
+    for line in reversed(AUDIT_FILE.read_text(errors="replace").splitlines()[-max(1,min(int(limit),500)) :]):
+        try: out.append(json.loads(line))
+        except ValueError: pass
+    return out
+
+ALL_SERVER_PERMISSIONS={"console","power","files.read","files.write","backups","settings","players","plugins","sftp","subusers"}
+
+def server_meta(sid):
+    return json.loads((safe_dir(sid)/"omcp.json").read_text())
+
+def server_permission(username,sid,permission):
+    if load_users().get(username,{}).get("role")=="admin": return True
+    try: meta=server_meta(sid)
+    except (OSError,ValueError): return False
+    if meta.get("owner")==username: return True
+    return permission in set((meta.get("members") or {}).get(username,[]))
 
 SFTP_PORT=int(os.environ.get("OMCP_SFTP_PORT","2022"))
 SFTP_STATE={"available":False,"status":"starting","error":"","fingerprint":""}
@@ -1639,12 +1666,20 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path
         if path in ('/api/me','/api/account/update','/api/panel/config'): return True
         if path=='/api/servers': return self.command=='GET'
-        match=re.match(r'^/api/servers/([a-f0-9]{8})(?:/|$)',path)
+        match=re.match(r'^/api/servers/([a-f0-9]{8})(?:/(.*))?$',path)
         if not match: return False
-        try:
-            meta=json.loads((SERVERS/match.group(1)/'omcp.json').read_text())
-            return meta.get('owner')==self.username
-        except (OSError,ValueError): return False
+        sid,suffix=match.group(1),match.group(2) or ''
+        if suffix.startswith('files') or suffix in ('archive','unarchive','download','mkdir','upload'):
+            permission='files.read' if self.command=='GET' else 'files.write'
+        elif suffix.startswith('backup'): permission='backups'
+        elif suffix in ('start','stop','restart'): permission='power'
+        elif suffix in ('logs','command','metrics'): permission='console'
+        elif suffix.startswith('players'): permission='players'
+        elif suffix.startswith(('plugins','mods')): permission='plugins'
+        elif suffix.startswith('sftp'): permission='sftp'
+        elif suffix.startswith('subusers'): permission='subusers'
+        else: permission='settings'
+        return server_permission(self.username,sid,permission)
     def do_GET(self):
         path=urlparse(self.path).path
         if path=="/api/health": return send(self,200,{"ok":True,"name":"OMCP"})
@@ -1681,10 +1716,13 @@ class Handler(BaseHTTPRequestHandler):
                 u=load_users().get(self.username)
                 if not u: return send(self,401,{"error":"Account no longer exists"})
                 return send(self,200,{"user":{"username":self.username,"email":u.get("email",""),"role":u.get("role","user")}})
+            if path=="/api/admin/audit":
+                if load_users().get(self.username,{}).get("role")!="admin": return send(self,403,{"error":"Admin permission required"})
+                return send(self,200,{"events":audit_events(parse_qs(urlparse(self.path).query).get("limit",["100"])[0])})
             if path=="/api/servers":
                 items=servers()
                 if load_users().get(self.username,{}).get('role')!='admin':
-                    items=[s for s in items if json.loads((SERVERS/s['id']/'omcp.json').read_text()).get('owner')==self.username]
+                    items=[s for s in items if (lambda m:m.get('owner')==self.username or self.username in (m.get('members') or {}))(json.loads((SERVERS/s['id']/'omcp.json').read_text()))]
                 return send(self,200,{"servers":items})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/mods/search",path)
             if x:
@@ -1697,6 +1735,10 @@ class Handler(BaseHTTPRequestHandler):
 
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/players",path)
             if x: return send(self,200,player_lists(x.group(1)))
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/subusers",path)
+            if x:
+                meta=server_meta(x.group(1)); members=meta.get("members") or {}
+                return send(self,200,{"owner":meta.get("owner"),"members":[{"username":u,"permissions":p} for u,p in members.items()],"availablePermissions":sorted(ALL_SERVER_PERMISSIONS)})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/properties",path)
             if x: return send(self,200,{"properties":read_server_properties(x.group(1)),"running":server_running(x.group(1))})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/worlds",path)
@@ -1994,6 +2036,16 @@ class Handler(BaseHTTPRequestHandler):
             if x: return send(self,200,install_modrinth(x.group(1),str(d.get("projectId","")),str(d.get("versionId","")),str(d.get("kind","mod"))))
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/players/action",path)
             if x: return send(self,200,player_action(x.group(1),str(d.get("action","")),str(d.get("name","")),str(d.get("uuid",""))))
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/subusers",path)
+            if x:
+                sid=x.group(1); username=str(d.get("username","")).strip(); permissions=d.get("permissions")
+                if username not in load_users(): raise ValueError("Panel user does not exist")
+                meta=server_meta(sid)
+                if username==meta.get("owner"): raise ValueError("Owner already has every permission")
+                if not isinstance(permissions,list) or not permissions or any(p not in ALL_SERVER_PERMISSIONS for p in permissions): raise ValueError("Select valid server permissions")
+                members=meta.setdefault("members",{}); members[username]=sorted(set(permissions)); atomic_json(SERVERS/sid/"omcp.json",meta)
+                audit(self.username,"server.subuser.saved",sid,{"username":username,"permissions":members[username]})
+                return send(self,200,{"saved":True,"username":username,"permissions":members[username]})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/settings",path)
             if x:
                 sid=x.group(1); folder=safe_dir(sid); meta=json.loads((folder/"omcp.json").read_text())
@@ -2098,6 +2150,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     result=create_live_backup(sid)
                     result.pop("path",None)
+                audit(self.username,"server."+act,sid)
                 return send(self,200,result)
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/rename",path)
             if x:
@@ -2151,6 +2204,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self.auth(): return send(self,401,{"error":"Login required"})
         path=urlparse(self.path).path
+        member=re.fullmatch(r"/api/servers/([a-f0-9]{8})/subusers/([A-Za-z0-9_.-]{3,24})",path)
+        if member:
+            try:
+                sid,username=member.groups(); meta=server_meta(sid); members=meta.setdefault("members",{})
+                if username not in members: raise ValueError("Subuser is not assigned to this server")
+                members.pop(username); atomic_json(SERVERS/sid/"omcp.json",meta)
+                audit(self.username,"server.subuser.removed",sid,{"username":username})
+                return send(self,200,{"deleted":username})
+            except Exception as e: return send(self,400,{"error":str(e)})
         sm=re.fullmatch(r"/api/servers/([a-f0-9]{8})",path)
         if sm:
             try:
