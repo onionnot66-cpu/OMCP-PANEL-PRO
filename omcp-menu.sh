@@ -11,7 +11,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 RESET='\033[0m'
 LINE='──────────────────────────────────────────────────────────────────────────────'
-REPO='https://raw.githubusercontent.com/nmronion-alt/OMCP-PANEL/main'
+REPO='https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main'
 TMP='/tmp/omcp-menu'
 if [[ "$EUID" -ne 0 ]]; then echo "Run this menu with sudo: sudo bash omcp-menu.sh"; exit 1; fi
 mkdir -p "$TMP"
