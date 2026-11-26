@@ -1634,7 +1634,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): print(fmt%args,flush=True)
     def auth(self):
         self.username=session_user(self)
-        return self.username is not None
+        if self.username is None: return False
+        if load_users().get(self.username,{}).get('role')=='admin': return True
+        path=urlparse(self.path).path
+        if path in ('/api/me','/api/account/update','/api/panel/config'): return True
+        if path=='/api/servers': return self.command=='GET'
+        match=re.match(r'^/api/servers/([a-f0-9]{8})(?:/|$)',path)
+        if not match: return False
+        try:
+            meta=json.loads((SERVERS/match.group(1)/'omcp.json').read_text())
+            return meta.get('owner')==self.username
+        except (OSError,ValueError): return False
     def do_GET(self):
         path=urlparse(self.path).path
         if path=="/api/health": return send(self,200,{"ok":True,"name":"OMCP"})
@@ -1644,7 +1654,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/api/setup/status":
             users=load_users(); legacy=next((u for u,r in users.items() if r.get("role")=="admin" and not r.get("password")),None)
             return send(self,200,{"setupRequired":len(users)==0 or legacy is not None,"passwordSetupRequired":len(users)>0 and legacy is not None,"setupUsername":legacy,"accountCount":len(users)})
-        if path=="/" or path=="/index.html":
+        if path in ('/', '/index.html', '/admin', '/admin/', '/admin/index.html'):
             try: return send(self,200,WEB.read_bytes(),"text/html; charset=utf-8")
             except Exception: return send(self,404,{"error":"UI file missing"})
         if path in ("/admin","/admin/","/admin/index.html","/admin.css","/admin.js"):
@@ -1671,7 +1681,11 @@ class Handler(BaseHTTPRequestHandler):
                 u=load_users().get(self.username)
                 if not u: return send(self,401,{"error":"Account no longer exists"})
                 return send(self,200,{"user":{"username":self.username,"email":u.get("email",""),"role":u.get("role","user")}})
-            if path=="/api/servers": return send(self,200,{"servers":servers()})
+            if path=="/api/servers":
+                items=servers()
+                if load_users().get(self.username,{}).get('role')!='admin':
+                    items=[s for s in items if json.loads((SERVERS/s['id']/'omcp.json').read_text()).get('owner')==self.username]
+                return send(self,200,{"servers":items})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/mods/search",path)
             if x:
                 q=parse_qs(urlparse(self.path).query)
@@ -1793,8 +1807,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/files",path)
             if x:
-                folder=safe_dir(x.group(1)); rel=self.headers.get("X-OMCP-Path","")
-                f=(folder/rel).resolve()
+                folder=safe_dir(x.group(1)); rel=parse_qs(urlparse(self.path).query).get('path',[self.headers.get("X-OMCP-Path","")])[0]
+                f=server_path(folder,rel) if rel else folder
                 if folder not in f.parents and f!=folder: raise ValueError("Path outside server")
                 if f.is_symlink(): raise ValueError("Symlink blocked")
                 if f.is_dir(): return send(self,200,{"entries":[{"name":a.name,"directory":a.is_dir(),"size":a.stat().st_size if a.is_file() else 0} for a in sorted(f.iterdir(),key=lambda p:(not p.is_dir(),p.name.casefold())) if not a.is_symlink()]})
@@ -1944,7 +1958,14 @@ class Handler(BaseHTTPRequestHandler):
                 schedules[sid]={"enabled":enabled,"interval_minutes":interval,"provider":provider,"last_run":old.get("last_run",0),"last_status":old.get("last_status","Not run yet"),"last_file_id":old.get("last_file_id","")}
                 save_backup_config(cfg)
                 return send(self,200,{"saved":True,"schedule":schedules[sid],"driveConfigured":google_drive_configured(cfg)})
-            if path=="/api/servers": return send(self,201,{"server":create(d)})
+            if path=="/api/servers":
+                owner=str(d.get('owner') or self.username)
+                if owner not in load_users(): raise ValueError('Server owner does not exist')
+                created=create(d)
+                meta_path=SERVERS/created['id']/'omcp.json'
+                meta=json.loads(meta_path.read_text()); meta['owner']=owner
+                atomic_json(meta_path,meta)
+                return send(self,201,{'server':created})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/properties",path)
             if x: return send(self,200,{"saved":True,"properties":write_server_properties(x.group(1),d.get("properties",{})),"apply":"restart"})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/archive",path)
