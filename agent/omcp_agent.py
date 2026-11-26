@@ -601,6 +601,8 @@ def physical_ram_gb():
     return 1
 
 def create(d):
+    if d.get('nodeId', 'local') != 'local':
+        raise ValueError('Remote node execution is not connected yet. Select Local Node.')
     name=str(d.get('name','')).strip(); ver=str(d.get('version','')).strip(); software=str(d.get('software','paper')).lower()
     mem=int(d.get('memory',2)); cpu_limit=int(d.get('cpuLimit',0)); port=int(d.get('port',25565))
     supported=('paper','purpur','folia','spigot','velocity','waterfall','fabric','vanilla')
@@ -1618,6 +1620,16 @@ def set_world_datapack(sid,name,pack,action):
     if not send_console_command(sid,'datapack '+action+' "'+item["id"]+'"'): raise ValueError("Could not send data pack command")
     return {"sent":True,"action":action,"pack":item["id"]}
 
+def admin_metadata():
+    path=ROOT/'admin-metadata.json'
+    data=json.loads(path.read_text()) if path.exists() else {'nodes':[], 'locations':[], 'settings':{}}
+    local={'id':'local','name':'Local Node','address':socket.gethostname(),
+           'kind':'local','status':'online','cpuThreads':os.cpu_count() or 1,
+           'memoryGb':physical_ram_gb(),'diskFreeGb':round(shutil.disk_usage(ROOT).free/1024**3,2),
+           'serverCount':len(servers()),'connectorRequired':False}
+    data['nodes']=[local]+[n for n in data.get('nodes',[]) if n.get('id')!='local']
+    return data
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,fmt,*args): print(fmt%args,flush=True)
     def auth(self):
@@ -1654,9 +1666,7 @@ class Handler(BaseHTTPRequestHandler):
                 return send(self,200,{"users":[{"username":u,"email":v.get("email",""),"role":v.get("role","user")} for u,v in load_users().items()]})
             if path=="/api/admin/metadata":
                 if load_users().get(self.username,{}).get("role")!="admin": return send(self,403,{"error":"Admin permission required"})
-                f=ROOT/"admin-metadata.json"
-                data=json.loads(f.read_text()) if f.exists() else {"nodes":[],"locations":[],"settings":{}}
-                return send(self,200,data)
+                return send(self,200,admin_metadata())
             if path=="/api/me":
                 u=load_users().get(self.username)
                 if not u: return send(self,401,{"error":"Account no longer exists"})
@@ -1858,6 +1868,9 @@ class Handler(BaseHTTPRequestHandler):
                 if key not in ("nodes","locations","settings"): raise ValueError("Invalid admin metadata key")
                 f=ROOT/"admin-metadata.json"; data=json.loads(f.read_text()) if f.exists() else {"nodes":[],"locations":[],"settings":{}}
                 if key in ("nodes","locations") and not isinstance(value,list): raise ValueError("Expected a list")
+                if key=='nodes':
+                    if any(not isinstance(n,dict) for n in value): raise ValueError('Invalid node record')
+                    value=[n for n in value if n.get('id')!='local']
                 if key=="settings" and not isinstance(value,dict): raise ValueError("Expected settings object")
                 data[key]=value; atomic_json(f,data); os.chmod(f,0o600)
                 return send(self,200,{"saved":True,"data":data})
