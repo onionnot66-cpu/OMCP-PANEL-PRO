@@ -29,6 +29,7 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: omcp_ci_only
           MYSQL_DATABASE: omcp_test_ci
+          MYSQL_ROOT_HOST: '%'
         ports:
           - 3306:3306
         options: >-
@@ -53,6 +54,7 @@ jobs:
       SESSION_DRIVER: array
       QUEUE_CONNECTION: sync
       MAIL_MAILER: array
+      RECAPTCHA_ENABLED: 'false'
       PTERODACTYL_TELEMETRY_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -69,9 +71,9 @@ jobs:
         run: |
           cp .env.example .env
           composer install --no-interaction --prefer-dist --no-scripts
+          export APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+          echo "APP_KEY=$APP_KEY" >> "$GITHUB_ENV"
           php artisan package:discover --ansi
-          php artisan key:generate --force
-          echo "APP_KEY=$(sed -n 's/^APP_KEY=//p' .env)" >> "$GITHUB_ENV"
       - name: Connector integration tests
         run: vendor/bin/phpunit tests/Integration/Omcp/ConnectorProtocolTest.php
       - name: Frontend build
