@@ -38,6 +38,7 @@
                 <button type="button" class="btn btn-primary" id="omcpEnroll">Generate enrollment</button>
                 <button type="button" class="btn btn-default" id="omcpRotate">Revoke and re-enroll</button>
                 <button type="button" class="btn btn-default" id="omcpDiagnostic">Run diagnostic</button>
+                <a class="btn btn-default" href="{{ route('admin.nodes.omcp.instances', $node->id) }}">Instance reservations</a>
                 <div style="margin: 15px 0">
                     <strong>Trusted native Minecraft (experimental)</strong>
                     <p>Controls only the single server directory explicitly enabled on this connector. Never use for untrusted tenants.</p>
