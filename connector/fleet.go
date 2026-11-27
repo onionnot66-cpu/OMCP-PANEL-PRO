@@ -100,3 +100,16 @@ func matchesFleetPort(data string,port int)bool{
  }
  return found
 }
+
+func(f *fleet) enableContainers(image string,cpus,budget int)error{
+ binary,err:=checkContainerRuntime(image,cpus)
+ if err!=nil{return err}
+ var total int64
+ for _,s:=range f.servers{total+=int64(s.memory)+512}
+ if total>int64(budget){return errors.New("fleet container budget must include 512 MiB overhead per server")}
+ for id,s:=range f.servers{
+  if strings.ContainsAny(s.dir,":,\n\r"){return errors.New("unsupported bind mount path")}
+  s.container=&containerRuntime{binary:binary,image:image,name:"omcp-"+id,port:f.ports[id],memory:s.memory+512,cpus:cpus}
+ }
+ return nil
+}
