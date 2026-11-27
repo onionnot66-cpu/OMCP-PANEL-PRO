@@ -23,6 +23,7 @@ type supervisor struct {
  provision bool
  allowConsole bool
  cpu cpuSample
+ container *containerRuntime
 }
 
 func newSupervisor(dir string,memory int)(*supervisor,error){return openSupervisor(dir,memory,false)}
@@ -66,11 +67,18 @@ func(s *supervisor) start()error{
  jar:=filepath.Join(s.dir,"server.jar")
  info,err:=os.Lstat(jar)
  if err!=nil || !info.Mode().IsRegular(){return errors.New("trusted server.jar missing")}
- java,err:=exec.LookPath("java")
- if err!=nil{return err}
- cmd:=exec.Command(java,fmt.Sprintf("-Xmx%dM",s.memory),"-jar","server.jar","nogui")
- cmd.Dir=s.dir
- cmd.Env=[]string{"PATH=/usr/local/bin:/usr/bin:/bin","HOME="+s.dir,"LANG=C.UTF-8"}
+ var cmd *exec.Cmd
+ if s.container!=nil{
+  if err:=s.container.requireAbsent();err!=nil{return err}
+  cmd=exec.Command(s.container.binary,s.container.args(s.dir,s.memory)...)
+  // Podman needs the local rootless runtime environment; only HOME is passed into the container explicitly.
+ }else{
+  java,err:=exec.LookPath("java")
+  if err!=nil{return err}
+  cmd=exec.Command(java,fmt.Sprintf("-Xmx%dM",s.memory),"-jar","server.jar","nogui")
+  cmd.Dir=s.dir
+  cmd.Env=[]string{"PATH=/usr/local/bin:/usr/bin:/bin","HOME="+s.dir,"LANG=C.UTF-8"}
+ }
  cmd.SysProcAttr=&syscall.SysProcAttr{Pdeathsig:syscall.SIGKILL}
  s.console.reset()
  s.cpu=cpuSample{}
@@ -86,16 +94,17 @@ func(s *supervisor) start()error{
 }
 
 func(s *supervisor) stop(force bool)error{
- if !s.running(){return nil}
+ if !s.running(){if s.container!=nil{return s.container.requireAbsent()};return nil}
  if !force{
   // Do not block indefinitely if the Java process stops consuming stdin.
   input:=s.input
   go func(){_,_=io.WriteString(input,"stop\n");_=input.Close()}()
   select{
-  case <-s.done:s.cmd=nil;s.input=nil;return nil
+  case <-s.done:s.cmd=nil;s.input=nil;if s.container!=nil{return s.container.requireAbsent()};return nil
   case <-time.After(25*time.Second):
   }
  }
+ if s.container!=nil{if err:=s.container.kill();err!=nil{return err}}
  if err:=s.cmd.Process.Kill();err!=nil && !errors.Is(err,os.ErrProcessDone){return err}
  select{
  case <-s.done:s.cmd=nil;s.input=nil;return nil
@@ -117,6 +126,7 @@ func(s *supervisor) execute(action string)(bool,string){
  default:return false,"unsupported native action"
  }
  if err!=nil{return false,err.Error()}
- if s.running(){return true,"process running (game readiness not verified)"}
+ if s.running(){if s.container!=nil{return true,"container attachment running (game readiness not verified)"};return true,"process running (game readiness not verified)"}
+ if s.container!=nil{if err:=s.container.requireAbsent();err!=nil{return false,err.Error()}}
  return true,"process stopped"
 }
