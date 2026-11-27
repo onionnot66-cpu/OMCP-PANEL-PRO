@@ -85,7 +85,10 @@ func run() error {
  fleetRoot:=flag.String("trusted-fleet-root","","private directory for locally authorized instances")
  fleetManifest:=flag.String("trusted-fleet-manifest","","private JSON allowlist of instance IDs, ports and heap budgets")
  fleetBudget:=flag.Int("trusted-fleet-memory",0,"total permitted Java heap MiB")
+ fleetImage:=flag.String("fleet-podman-image","","optional approved local rootless Podman image ID (sha256:...)")
+ fleetCPUs:=flag.Int("fleet-podman-cpus",2,"container CPU limit per instance")
  flag.Parse()
+ if *fleetImage!="" && *fleetRoot==""{return errors.New("Podman requires trusted fleet mode")}
  if (*fleetRoot=="")!=(*fleetManifest=="") || (*fleetRoot!="" && *trustedDir!=""){return errors.New("choose single native mode or a complete fleet configuration")}
  if *allowConsole && *trustedDir=="" && *fleetRoot==""{return errors.New("console requires --trusted-native-dir")}
  if *provision && *trustedDir=="" && *fleetRoot=="" {return errors.New("provision requires --trusted-native-dir")}
@@ -127,6 +130,7 @@ func run() error {
   multi,err=openFleet(*fleetRoot,*fleetManifest,*fleetBudget,*provision,*allowConsole)
   if err!=nil{return err}
   defer multi.close()
+  if *fleetImage!=""{if err=multi.enableContainers(*fleetImage,*fleetCPUs,*fleetBudget);err!=nil{return err}}
  }
  stop := make(chan os.Signal,1)
  signal.Notify(stop,os.Interrupt,syscall.SIGTERM)
