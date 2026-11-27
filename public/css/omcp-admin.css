@@ -1,0 +1,37 @@
+/* OMCP admin design foundation; scoped to the existing AdminLTE layout. */
+body.skin-blue {
+  --omcp-bg: #f3f4f8;
+  --omcp-nav: #171329;
+  --omcp-accent: #7655d7;
+  --omcp-text: #242338;
+  --omcp-border: #e3e4ed;
+  color: var(--omcp-text);
+}
+.skin-blue .main-header .logo,
+.skin-blue .main-header .navbar,
+.skin-blue .main-sidebar,
+.skin-blue .left-side {
+  background: var(--omcp-nav);
+}
+.skin-blue .main-header .logo { font-weight: 800; letter-spacing: .12em; }
+.skin-blue .main-header .logo:hover,
+.skin-blue .main-header .navbar .sidebar-toggle:hover { background: #26203f; }
+.skin-blue .sidebar-menu > li.header { background: transparent; color: #b4accd; letter-spacing: .08em; font-size: 10px; }
+.skin-blue .sidebar-menu > li > a { border-left: 3px solid transparent; color: #e1ddef; }
+.skin-blue .sidebar-menu > li.active > a,
+.skin-blue .sidebar-menu > li:hover > a { background: #30264c; border-left-color: #aa93ff; color: white; }
+.skin-blue .content-wrapper { background: var(--omcp-bg); }
+.skin-blue .content-wrapper .box,
+.skin-blue .content-wrapper .nav-tabs-custom { border-radius: 10px; box-shadow: 0 4px 14px rgba(26,20,49,.06); border-top-color: var(--omcp-accent); }
+.skin-blue .content-wrapper .box-header.with-border { border-bottom-color: var(--omcp-border); }
+.skin-blue .content-wrapper .btn-primary { background: #6546c4; border-color: #6546c4; }
+.skin-blue .content-wrapper .btn-primary:hover { background: #5335ac; border-color: #5335ac; }
+.skin-blue .content-wrapper .btn { border-radius: 6px; }
+.skin-blue .content-wrapper .form-control { border-radius: 6px; }
+.skin-blue .content-wrapper .form-control:focus { border-color: var(--omcp-accent); }
+.skin-blue .content-wrapper a:focus-visible,
+.skin-blue .content-wrapper button:focus-visible { outline: 2px solid var(--omcp-accent); outline-offset: 3px; }
+.skin-blue .main-footer { border-top-color: var(--omcp-border); }
+@media (prefers-reduced-motion: reduce) {
+  .skin-blue .main-sidebar, .skin-blue .content-wrapper { transition: none !important; }
+}
