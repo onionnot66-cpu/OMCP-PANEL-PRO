@@ -37,7 +37,7 @@ class ConnectionController extends Controller
         $token = $this->token($request);
         $data = $request->validate([
             'node_id' => 'required|integer|min:1',
-            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision',
+            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input',
             'capabilities.os' => 'required|string|max:32',
             'capabilities.arch' => 'required|string|max:32',
             'capabilities.cpus' => 'required|integer|min:1|max:65536',
@@ -47,6 +47,16 @@ class ConnectionController extends Controller
             'capabilities.java_cli' => 'required|boolean',
             'capabilities.native_enabled' => 'sometimes|boolean',
             'capabilities.native_provision' => 'sometimes|boolean',
+            'capabilities.native_console_input' => 'sometimes|boolean',
+            'telemetry' => 'sometimes|array:console,metrics',
+            'telemetry.console' => 'required_with:telemetry|string|max:3500',
+            'telemetry.metrics' => 'required_with:telemetry|array:process_running,java_heap_limit_mib,filesystem_available_bytes,filesystem_capacity_bytes,java_rss_bytes,cpu_host_percent',
+            'telemetry.metrics.process_running' => 'required_with:telemetry|boolean',
+            'telemetry.metrics.java_heap_limit_mib' => 'required_with:telemetry|integer|min:128|max:1048576',
+            'telemetry.metrics.filesystem_available_bytes' => 'sometimes|integer|min:0',
+            'telemetry.metrics.filesystem_capacity_bytes' => 'sometimes|integer|min:0',
+            'telemetry.metrics.java_rss_bytes' => 'sometimes|integer|min:0',
+            'telemetry.metrics.cpu_host_percent' => 'sometimes|numeric|min:0|max:100',
         ]);
 
         $hash = hash('sha256', $token);
@@ -58,13 +68,14 @@ class ConnectionController extends Controller
             }
             $query->update([
                 'last_seen_at' => now(),
+                'telemetry' => !empty($data['capabilities']['native_enabled']) && isset($data['telemetry']) ? json_encode($data['telemetry'], JSON_THROW_ON_ERROR) : null,
                 'capabilities' => json_encode($data['capabilities'], JSON_THROW_ON_ERROR),
                 'updated_at' => now(),
             ]);
             return true;
         });
         abort_unless($authenticated, 401, 'Invalid connector credential.');
-        return response()->json(['ok' => true, 'heartbeat_interval' => 30])->header('Cache-Control', 'no-store');
+        return response()->json(['ok' => true, 'heartbeat_interval' => 5])->header('Cache-Control', 'no-store');
     }
 
     private function token(Request $request): string
