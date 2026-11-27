@@ -41,11 +41,22 @@
                 <div style="margin: 15px 0">
                     <strong>Trusted native Minecraft (experimental)</strong>
                     <p>Controls only the single server directory explicitly enabled on this connector. Never use for untrusted tenants.</p>
-                    @foreach (['start', 'stop', 'restart', 'kill', 'status', 'console'] as $action)
+                    @foreach (['start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics'] as $action)
                         <button type="button" class="btn btn-default omcpPower" data-action="{{ $action }}">{{ ucfirst($action) }}</button>
                     @endforeach
                 </div>
-                <pre id="omcpDiagnosticOutput" hidden></pre>
+                <div class="well">
+                    <h4>Create a trusted Minecraft test server</h4>
+                    <p>Requires connector started with explicit local provisioning enabled and an unused directory. Existing worlds are never overwritten.</p>
+                    <div class="row">
+                        <div class="col-sm-4"><label for="omcpSoftware">Software</label><select id="omcpSoftware" class="form-control"><option value="paper">Paper</option><option value="purpur">Purpur</option><option value="vanilla">Vanilla</option></select></div>
+                        <div class="col-sm-4"><label for="omcpVersion">Exact Minecraft version</label><input id="omcpVersion" class="form-control" placeholder="1.21.4" maxlength="32"></div>
+                        <div class="col-sm-4"><label for="omcpPort">TCP port</label><input id="omcpPort" class="form-control" type="number" min="1024" max="65535" value="25565"></div>
+                    </div>
+                    <div class="checkbox"><label><input type="checkbox" id="omcpEula"> I have read and accept the <a href="https://www.minecraft.net/eula" target="_blank" rel="noopener noreferrer">Minecraft EULA</a>.</label></div>
+                    <button type="button" class="btn btn-primary omcpPower" data-action="install">Install Minecraft</button>
+                </div>
+                <pre id="omcpDiagnosticOutput" role="status" style="white-space:pre-wrap;max-height:400px;overflow:auto" hidden></pre>
                 <div id="omcpInstructions" hidden>
                     <p>Run the command on your node and supply the token privately when prompted. Token expires after 15 minutes.</p>
                     <pre id="omcpCommand"></pre>
@@ -129,13 +140,18 @@
     $('#omcpDiagnostic, .omcpPower').on('click', function () {
         const action = $(this).data('action');
         if (action === 'kill' && !window.confirm('Force stop the trusted Minecraft process? Unsaved changes may be lost.')) return;
+        if (action === 'install' && !$('#omcpEula').prop('checked')) {
+            $('#omcpDiagnosticOutput').prop('hidden', false).text('Read and accept the Minecraft EULA first.');
+            return;
+        }
         clearTimeout(diagnosticTimer);
         const button = $('#omcpDiagnostic, .omcpPower').prop('disabled', true);
         const output = $('#omcpDiagnosticOutput').prop('hidden', false).text('Queueing ' + (action || 'diagnostic') + '...');
         $.ajax({
             method: 'POST',
-            url: action ? '{{ route('admin.nodes.omcp.power', $node->id) }}' : '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}',
-            data: action ? {action: action} : {},
+            url: action === 'install' ? '{{ route('admin.nodes.omcp.install', $node->id) }}' : (action ? '{{ route('admin.nodes.omcp.power', $node->id) }}' : '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}'),
+            data: action === 'install' ? {software: $('#omcpSoftware').val(), version: $('#omcpVersion').val(), port: $('#omcpPort').val(), accept_eula: 1} : (action ? {action: action} : {}),
+            dataType: 'json',
             headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'}
         }).done(function (data) {
             let attempts = 0;
@@ -143,13 +159,13 @@
             function poll() {
                 $.getJSON(url).done(function (job) {
                     output.text(job.state + (job.result ? '\n' + job.result : ''));
-                    if ((job.state === 'queued' || job.state === 'running') && ++attempts < 70) {
+                    if ((job.state === 'queued' || job.state === 'running') && ++attempts < (action === 'install' ? 270 : 70)) {
                         diagnosticTimer = setTimeout(poll, 5000);
                     } else button.prop('disabled', false);
                 }).fail(function () { output.text('Unable to read diagnostic.'); button.prop('disabled', false); });
             }
             poll();
-        }).fail(function () { output.text('Unable to queue diagnostic.'); button.prop('disabled', false); });
+        }).fail(function (xhr) { output.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to queue action.'); button.prop('disabled', false); });
     });
     refreshOmcp();
     setInterval(refreshOmcp, 30000);
