@@ -40,6 +40,7 @@ git -C "$dest" fetch --depth 1 origin "$revision"
 git -C "$dest" checkout --detach FETCH_HEAD
 cd "$dest"
 install -d -m 700 storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
+salt="$(php -r 'echo bin2hex(random_bytes(24));')"
 cat > .env <<ENV
 APP_NAME=OMCP
 APP_ENV=local
@@ -50,6 +51,7 @@ APP_URL=http://127.0.0.1:8080
 APP_ENVIRONMENT_ONLY=true
 APP_TIMEZONE=UTC
 APP_LOCALE=en
+HASHIDS_SALT=$salt
 LOG_CHANNEL=daily
 LOG_LEVEL=warning
 DB_CONNECTION=mysql
@@ -63,6 +65,7 @@ CACHE_STORE=file
 SESSION_DRIVER=file
 QUEUE_CONNECTION=sync
 MAIL_MAILER=log
+RECAPTCHA_ENABLED=false
 MAIL_FROM_ADDRESS=no-reply@example.com
 MAIL_FROM_NAME=OMCP
 PTERODACTYL_TELEMETRY_ENABLED=false
@@ -70,7 +73,7 @@ ENV
 unset dbpass
 chmod 600 .env
 # Prevent unrelated inherited deployment settings from overriding the test file.
-unset DB_URL DATABASE_URL DB_SOCKET DB_DATABASE DB_USERNAME DB_PASSWORD DB_HOST DB_PORT DB_CONNECTION APP_KEY APP_URL APP_ENV APP_DEBUG APP_STORAGE_PATH APP_BASE_PATH CACHE_STORE CACHE_DRIVER SESSION_DRIVER QUEUE_CONNECTION MAIL_MAILER APP_CONFIG_CACHE
+unset DB_URL DATABASE_URL DB_SOCKET DB_DATABASE DB_USERNAME DB_PASSWORD DB_HOST DB_PORT DB_CONNECTION DB_PREFIX APP_KEY APP_URL APP_ENV APP_DEBUG APP_STORAGE_PATH APP_BASE_PATH CACHE_STORE CACHE_DRIVER SESSION_DRIVER QUEUE_CONNECTION MAIL_MAILER RECAPTCHA_ENABLED HASHIDS_SALT APP_CONFIG_CACHE
 composer install --no-dev --prefer-dist --no-interaction --no-scripts
 composer check-platform-reqs --no-dev
 php artisan package:discover --ansi
