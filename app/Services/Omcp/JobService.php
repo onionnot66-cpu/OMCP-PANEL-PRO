@@ -14,21 +14,28 @@ class JobService
 
     public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
             if ($action !== 'diagnostic') {
                 abort_unless($connection->last_seen_at && \Illuminate\Support\Carbon::parse($connection->last_seen_at)->gt(now()->subSeconds(90)), 409, 'Connector offline.');
                 $capabilities = json_decode($connection->capabilities ?? '{}', true) ?: [];
-                abort_unless(!empty($capabilities['native_enabled']), 409, 'Connector has not enabled trusted native mode.');
+                if (str_starts_with($action, 'instance.')) {
+                    abort_unless(!empty($capabilities['fleet_enabled']), 409, 'Connector has not enabled trusted fleet mode.');
+                    if ($action === 'instance.install') {
+                        abort_unless(!empty($capabilities['fleet_provision']), 409, 'Local fleet provisioning opt-in required.');
+                    }
+                } else {
+                    abort_unless(!empty($capabilities['native_enabled']), 409, 'Connector has not enabled trusted native mode.');
+                }
                 if ($action === 'native.install') {
                     abort_unless(!empty($capabilities['native_provision']), 409, 'Local provisioning opt-in required.');
                 }
                 if ($action === 'native.command') {
                     abort_unless(!empty($capabilities['native_console_input']), 409, 'Local console input opt-in required.');
                 }
-                $busy = DB::table('omcp_jobs')->where('node_id', $node)->where('action', 'like', 'native.%')
+                $busy = DB::table('omcp_jobs')->where('node_id', $node)->where(function ($query) { $query->where('action', 'like', 'native.%')->orWhere('action', 'like', 'instance.%'); })
                     ->whereIn('state', ['queued', 'running'])->where('expires_at', '>', now())->exists();
                 abort_if($busy, 409, 'A native action is already pending.');
             }
@@ -67,7 +74,7 @@ class JobService
             DB::table('omcp_jobs')->where('id', $job->id)->update([
                 'state' => 'running',
                 'lease_hash' => hash('sha256', $lease),
-                'expires_at' => now()->addMinutes($job->action === 'native.install' ? 20 : 2),
+                'expires_at' => now()->addMinutes(in_array($job->action, ['native.install', 'instance.install'], true) ? 20 : 2),
                 'updated_at' => now(),
             ]);
             return ['id' => $job->id, 'action' => $job->action, 'lease' => $lease, 'payload' => json_decode($job->payload ?? '{}', true) ?: (object) []];
