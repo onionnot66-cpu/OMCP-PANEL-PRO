@@ -14,7 +14,7 @@ class JobService
 
     public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
@@ -24,6 +24,9 @@ class JobService
                 abort_unless(!empty($capabilities['native_enabled']), 409, 'Connector has not enabled trusted native mode.');
                 if ($action === 'native.install') {
                     abort_unless(!empty($capabilities['native_provision']), 409, 'Local provisioning opt-in required.');
+                }
+                if ($action === 'native.command') {
+                    abort_unless(!empty($capabilities['native_console_input']), 409, 'Local console input opt-in required.');
                 }
                 $busy = DB::table('omcp_jobs')->where('node_id', $node)->where('action', 'like', 'native.%')
                     ->whereIn('state', ['queued', 'running'])->where('expires_at', '>', now())->exists();
