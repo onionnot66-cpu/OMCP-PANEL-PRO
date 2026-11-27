@@ -27,14 +27,14 @@ class OmcpConnectionController extends Controller
         $data = $request->validate(['rotate' => 'sometimes|boolean']);
         $origin = rtrim((string) config('app.url'), '/');
         $url = parse_url($origin);
-        abort_unless(is_array($url) && ($url['scheme'] ?? '') === 'https' && !empty($url['host']) && !isset($url['user'], $url['pass']) && empty($url['path']) && empty($url['query']) && empty($url['fragment']), 422, 'Configure an HTTPS panel origin first.');
+        abort_unless(is_array($url) && ($url['scheme'] ?? '') === 'https' && !empty($url['host']) && !isset($url['user']) && !isset($url['pass']) && empty($url['path']) && empty($url['query']) && empty($url['fragment']), 422, 'Configure an HTTPS panel origin first.');
         $token = $service->issue($node->id, (bool) ($data['rotate'] ?? false));
         abort_unless($token !== null, 409, 'Enrollment exists. Explicitly rotate to revoke it.');
 
         return response()->json([
             'token' => $token,
             'expires_in' => 900,
-            'command' => 'bash omcp-connect-install.sh --panel ' . escapeshellarg($origin) . ' --node ' . $node->id,
+            'command' => 'curl --proto =https -fL --retry 3 https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/168ced5d9f40944aa1ca77768d9e258268d6b732/omcp-connect-install.sh -o omcp-connect-install.sh && bash omcp-connect-install.sh --panel ' . escapeshellarg($origin) . ' --node ' . $node->id,
         ])->header('Cache-Control', 'no-store');
     }
 }
