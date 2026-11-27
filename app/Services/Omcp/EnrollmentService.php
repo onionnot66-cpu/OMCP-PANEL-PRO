@@ -23,6 +23,7 @@ class EnrollmentService
                 'credential_hash' => null,
                 'last_seen_at' => null,
                 'capabilities' => null,
+                'telemetry' => null,
                 'updated_at' => now(),
             ];
             if ($existing) {
