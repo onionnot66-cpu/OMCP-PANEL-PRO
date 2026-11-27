@@ -29,3 +29,14 @@ Use a dedicated, disposable non-root account and a trusted Minecraft server dire
 ```
 
 The node Configuration page can queue Start, Stop, Restart, Kill and Status operations for this one local server. There are no remote path or command arguments. A process running result does not guarantee Minecraft is accepting players. Graceful stop has a timeout and may force kill. Stopping the connector stops its supervised Java process. This feature shares an OS account with the connector: trusted jars/plugins only, never expose to ordinary hosting customers or treat it as isolated. Existing client server creation, console, multi-server management and tenant resource enforcement are not implemented by this experiment.
+
+## Local Minecraft setup and console snapshot
+
+As the dedicated non-root test account, import a trusted server jar using the expected SHA-256 from a trusted source. Read the Minecraft EULA before accepting it:
+
+```bash
+~/.local/bin/omcp-connect setup --dir "$HOME/minecraft-test" --jar /path/to/trusted-server.jar --sha256 EXPECTED_SHA256 --port 25565 --accept-eula
+~/.local/bin/omcp-connect --trusted-native-dir "$HOME/minecraft-test" --trusted-native-memory 1024
+```
+
+Setup refuses existing directories, verifies the jar checksum, writes server.properties with online-mode enabled, and requires Java to be present. It does not download Minecraft or install Java automatically. Admin diagnostics report Java version if available. The admin Console button retrieves at most 3500 bytes of recent process output through a node-scoped job. It is not a live stream or command input. Console output is stored in the panel database as a job result, so use only disposable test workloads and do not log secrets.
