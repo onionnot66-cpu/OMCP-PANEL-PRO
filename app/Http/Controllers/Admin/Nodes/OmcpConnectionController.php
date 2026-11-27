@@ -29,10 +29,23 @@ class OmcpConnectionController extends Controller
 
     public function power(Request $request, Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
     {
-        $data = $request->validate(['action' => 'required|in:start,stop,restart,kill,status,console']);
+        $data = $request->validate(['action' => 'required|in:start,stop,restart,kill,status,console,metrics']);
         abort_if($node->isUnderMaintenance() && in_array($data['action'], ['start', 'restart'], true), 409, 'Node is in maintenance.');
         return response()->json(['id' => $jobs->enqueue($node->id, 'native.' . $data['action'])], 202)
             ->header('Cache-Control', 'no-store');
+    }
+
+    public function install(Request $request, Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
+    {
+        abort_if($node->isUnderMaintenance(), 409, 'Node is in maintenance.');
+        $data = $request->validate([
+            'software' => 'required|in:vanilla,paper,purpur',
+            'version' => ['required', 'string', 'max:32', 'regex:/\A[0-9]+(\.[0-9]+){1,3}\z/'],
+            'port' => 'required|integer|min:1024|max:65535',
+            'accept_eula' => 'required|accepted',
+        ]);
+        $payload = ['software' => $data['software'], 'version' => $data['version'], 'port' => (int) $data['port'], 'accept_eula' => true];
+        return response()->json(['id' => $jobs->enqueue($node->id, 'native.install', $payload)], 202)->header('Cache-Control', 'no-store');
     }
 
     public function diagnosticResult(Node $node, string $job): JsonResponse
