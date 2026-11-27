@@ -16,6 +16,8 @@ ROOT.mkdir(parents=True,exist_ok=True); SERVERS.mkdir(parents=True,exist_ok=True
 DEPLOYMENT_FILE=ROOT/"deployment.json"
 NETWORK_FILE=ROOT/"network.json"
 AUDIT_FILE=ROOT/"audit.jsonl"
+SCHEDULES_FILE=ROOT/"schedules.json"
+DATABASES_FILE=ROOT/"databases.json"
 
 def read_config_file(path, default):
     try:
@@ -117,7 +119,7 @@ def audit_events(limit=100):
         except ValueError: pass
     return out
 
-ALL_SERVER_PERMISSIONS={"console","power","files.read","files.write","backups","settings","players","plugins","sftp","subusers"}
+ALL_SERVER_PERMISSIONS={"console","power","files.read","files.write","backups","settings","players","plugins","sftp","subusers","schedules","databases"}
 
 def server_meta(sid):
     return json.loads((safe_dir(sid)/"omcp.json").read_text())
@@ -128,6 +130,82 @@ def server_permission(username,sid,permission):
     except (OSError,ValueError): return False
     if meta.get("owner")==username: return True
     return permission in set((meta.get("members") or {}).get(username,[]))
+
+def load_schedules(): return read_config_file(SCHEDULES_FILE,{"servers":{}})
+def save_schedules(data): atomic_json(SCHEDULES_FILE,data); os.chmod(SCHEDULES_FILE,0o600)
+
+def server_schedules(sid): return load_schedules().get("servers",{}).get(sid,[])
+
+def save_server_schedule(sid,data):
+    name=str(data.get("name","")).strip(); action=str(data.get("action","")).strip(); payload=str(data.get("payload","")).strip()
+    interval=int(data.get("intervalMinutes",0)); enabled=bool(data.get("enabled",True))
+    if not 1<=len(name)<=64: raise ValueError("Schedule name must be 1-64 characters")
+    if action not in ("start","stop","restart","command","backup"): raise ValueError("Unsupported schedule action")
+    if action=="command" and (not payload or len(payload)>500 or "\n" in payload or "\r" in payload): raise ValueError("Enter one valid console command")
+    if not 5<=interval<=10080: raise ValueError("Interval must be between 5 minutes and 7 days")
+    cfg=load_schedules(); items=cfg.setdefault("servers",{}).setdefault(sid,[])
+    schedule_id=str(data.get("id") or secrets.token_hex(4))
+    item={"id":schedule_id,"name":name,"action":action,"payload":payload,"intervalMinutes":interval,"enabled":enabled,"nextRun":int(time.time())+interval*60,"lastRun":None,"lastStatus":""}
+    items[:]=[x for x in items if x.get("id")!=schedule_id]; items.append(item); save_schedules(cfg); return item
+
+def delete_server_schedule(sid,schedule_id):
+    cfg=load_schedules(); items=cfg.setdefault("servers",{}).setdefault(sid,[]); before=len(items)
+    items[:]=[x for x in items if x.get("id")!=schedule_id]
+    if len(items)==before: raise ValueError("Schedule not found")
+    save_schedules(cfg)
+
+def schedule_loop():
+    while True:
+        try:
+            now=int(time.time()); cfg=load_schedules(); changed=False
+            for sid,items in cfg.get("servers",{}).items():
+                for item in items:
+                    if not item.get("enabled") or int(item.get("nextRun",now+999))>now: continue
+                    try:
+                        action=item.get("action")
+                        if action=="start": start(sid)
+                        elif action=="stop": stop(sid)
+                        elif action=="restart": stop(sid); start(sid)
+                        elif action=="command":
+                            if not send_console_command(sid,str(item.get("payload",""))): raise ValueError("Console unavailable")
+                        else: create_live_backup(sid,"Scheduled backup")
+                        item["lastStatus"]="completed"; audit("scheduler","server."+action,sid)
+                    except Exception as exc: item["lastStatus"]="failed: "+str(exc)[:300]
+                    item["lastRun"]=now; item["nextRun"]=now+int(item.get("intervalMinutes",60))*60; changed=True
+            if changed: save_schedules(cfg)
+        except Exception as exc: print("OMCP schedule error: "+str(exc),flush=True)
+        time.sleep(15)
+
+def database_records(): return read_config_file(DATABASES_FILE,{"servers":{}})
+def save_database_records(data): atomic_json(DATABASES_FILE,data); os.chmod(DATABASES_FILE,0o600)
+
+def mariadb_command(sql):
+    binary=shutil.which("mariadb") or shutil.which("mysql")
+    if not binary: raise ValueError("MariaDB client is unavailable. Install OMCP database support first.")
+    result=subprocess.run([binary,"--protocol=socket","-uroot","-e",sql],capture_output=True,text=True,timeout=30)
+    if result.returncode: raise ValueError("MariaDB operation failed: "+(result.stderr or result.stdout)[-500:])
+
+def server_databases(sid): return database_records().get("servers",{}).get(sid,[])
+
+def create_database(sid,label):
+    label=re.sub(r"[^a-z0-9_]","_",str(label).lower().strip())[:20].strip("_")
+    if not label: raise ValueError("Database name must contain letters or numbers")
+    cfg=database_records(); items=cfg.setdefault("servers",{}).setdefault(sid,[])
+    if len(items)>=10: raise ValueError("Maximum 10 databases per server")
+    name=("omcp_"+sid+"_"+label)[:60]
+    if any(x.get("name")==name for x in items): raise ValueError("Database already exists")
+    username=("u"+sid+secrets.token_hex(2))[:16]; password=secrets.token_urlsafe(24)
+    safe_password=password.replace("'","''")
+    mariadb_command("CREATE DATABASE `"+name+"` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER '"+username+"'@'localhost' IDENTIFIED BY '"+safe_password+"'; GRANT ALL PRIVILEGES ON `"+name+"`.* TO '"+username+"'@'localhost'; FLUSH PRIVILEGES;")
+    record={"id":secrets.token_hex(4),"name":name,"username":username,"host":"127.0.0.1","port":3306,"created":int(time.time())}
+    items.append(record); save_database_records(cfg)
+    return {**record,"password":password}
+
+def delete_database(sid,database_id):
+    cfg=database_records(); items=cfg.setdefault("servers",{}).setdefault(sid,[]); item=next((x for x in items if x.get("id")==database_id),None)
+    if not item: raise ValueError("Database not found")
+    mariadb_command("DROP DATABASE IF EXISTS `"+item["name"]+"`; DROP USER IF EXISTS '"+item["username"]+"'@'localhost'; FLUSH PRIVILEGES;")
+    items.remove(item); save_database_records(cfg)
 
 SFTP_PORT=int(os.environ.get("OMCP_SFTP_PORT","2022"))
 SFTP_STATE={"available":False,"status":"starting","error":"","fingerprint":""}
@@ -1666,6 +1744,8 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path
         if path in ('/api/me','/api/account/update','/api/panel/config'): return True
         if path=='/api/servers': return self.command=='GET'
+        backup_match=re.match(r'^/api/backups/([a-f0-9]{8})-',path)
+        if backup_match: return server_permission(self.username,backup_match.group(1),'backups')
         match=re.match(r'^/api/servers/([a-f0-9]{8})(?:/(.*))?$',path)
         if not match: return False
         sid,suffix=match.group(1),match.group(2) or ''
@@ -1678,6 +1758,8 @@ class Handler(BaseHTTPRequestHandler):
         elif suffix.startswith(('plugins','mods')): permission='plugins'
         elif suffix.startswith('sftp'): permission='sftp'
         elif suffix.startswith('subusers'): permission='subusers'
+        elif suffix.startswith('schedules'): permission='schedules'
+        elif suffix.startswith('databases'): permission='databases'
         else: permission='settings'
         return server_permission(self.username,sid,permission)
     def do_GET(self):
@@ -1738,7 +1820,11 @@ class Handler(BaseHTTPRequestHandler):
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/subusers",path)
             if x:
                 meta=server_meta(x.group(1)); members=meta.get("members") or {}
-                return send(self,200,{"owner":meta.get("owner"),"members":[{"username":u,"permissions":p} for u,p in members.items()],"availablePermissions":sorted(ALL_SERVER_PERMISSIONS)})
+                return send(self,200,{"owner":meta.get("owner"),"members":[{"username":u,"permissions":p} for u,p in members.items()],"availablePermissions":sorted(ALL_SERVER_PERMISSIONS),"availableUsers":[{"username":u,"email":r.get("email","")} for u,r in load_users().items() if u!=meta.get("owner")]})
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/schedules",path)
+            if x: return send(self,200,{"schedules":server_schedules(x.group(1))})
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/databases",path)
+            if x: return send(self,200,{"databases":server_databases(x.group(1)),"available":bool(shutil.which("mariadb") or shutil.which("mysql"))})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/properties",path)
             if x: return send(self,200,{"properties":read_server_properties(x.group(1)),"running":server_running(x.group(1))})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/worlds",path)
@@ -1778,6 +1864,15 @@ class Handler(BaseHTTPRequestHandler):
             if sx:
                 cfg=load_backup_config(); item=cfg.get("schedules",{}).get(sx.group(1),{})
                 return send(self,200,{"schedule":item,"driveConfigured":google_drive_configured(cfg)})
+            bx=re.fullmatch(r"/api/servers/([a-f0-9]{8})/backups",path)
+            if bx:
+                sid=bx.group(1); dest=ROOT/"backups"; dest.mkdir(exist_ok=True); items=[]
+                for f in sorted(dest.glob(sid+"-*.zip"),key=lambda p:p.stat().st_mtime,reverse=True):
+                    if f.is_file() and not f.is_symlink():
+                        try: meta=json.loads(f.with_suffix(".json").read_text()) if f.with_suffix(".json").is_file() else {}
+                        except Exception: meta={}
+                        items.append({"name":f.name,"displayName":meta.get("displayName",f.name),"bytes":f.stat().st_size,"created":int(f.stat().st_mtime)})
+                return send(self,200,{"backups":items})
             if path=="/api/backups":
                 dest=ROOT/"backups"; dest.mkdir(exist_ok=True)
                 items=[]
@@ -2046,6 +2141,14 @@ class Handler(BaseHTTPRequestHandler):
                 members=meta.setdefault("members",{}); members[username]=sorted(set(permissions)); atomic_json(SERVERS/sid/"omcp.json",meta)
                 audit(self.username,"server.subuser.saved",sid,{"username":username,"permissions":members[username]})
                 return send(self,200,{"saved":True,"username":username,"permissions":members[username]})
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/schedules",path)
+            if x:
+                item=save_server_schedule(x.group(1),d); audit(self.username,"server.schedule.saved",x.group(1),{"scheduleId":item["id"]})
+                return send(self,200,{"schedule":item})
+            x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/databases",path)
+            if x:
+                item=create_database(x.group(1),str(d.get("name",""))); audit(self.username,"server.database.created",x.group(1),{"database":item["name"]})
+                return send(self,201,{"database":item,"message":"Save this password now; it will not be shown again."})
             x=re.fullmatch(r"/api/servers/([a-f0-9]{8})/settings",path)
             if x:
                 sid=x.group(1); folder=safe_dir(sid); meta=json.loads((folder/"omcp.json").read_text())
@@ -2213,6 +2316,18 @@ class Handler(BaseHTTPRequestHandler):
                 audit(self.username,"server.subuser.removed",sid,{"username":username})
                 return send(self,200,{"deleted":username})
             except Exception as e: return send(self,400,{"error":str(e)})
+        schedule=re.fullmatch(r"/api/servers/([a-f0-9]{8})/schedules/([a-f0-9]{8})",path)
+        if schedule:
+            try:
+                sid,schedule_id=schedule.groups(); delete_server_schedule(sid,schedule_id); audit(self.username,"server.schedule.deleted",sid,{"scheduleId":schedule_id})
+                return send(self,200,{"deleted":schedule_id})
+            except Exception as e: return send(self,400,{"error":str(e)})
+        database=re.fullmatch(r"/api/servers/([a-f0-9]{8})/databases/([a-f0-9]{8})",path)
+        if database:
+            try:
+                sid,database_id=database.groups(); delete_database(sid,database_id); audit(self.username,"server.database.deleted",sid,{"databaseId":database_id})
+                return send(self,200,{"deleted":database_id})
+            except Exception as e: return send(self,400,{"error":str(e)})
         sm=re.fullmatch(r"/api/servers/([a-f0-9]{8})",path)
         if sm:
             try:
@@ -2262,5 +2377,6 @@ class Handler(BaseHTTPRequestHandler):
 
 start_sftp_service()
 threading.Thread(target=backup_scheduler_loop,daemon=True,name="omcp-backup-scheduler").start()
+threading.Thread(target=schedule_loop,daemon=True,name="omcp-scheduler").start()
 print("OMCP listening at http://%s:%s"%(HOST,PORT),flush=True)
 ThreadingHTTPServer((HOST,PORT),Handler).serve_forever()

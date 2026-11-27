@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 # OMCP installer for Ubuntu/Debian. Supports systemd VPS and no-systemd shells.
-REPO="https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main"
+REPO="https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/rebuild/omcp-native"
 APP="/opt/omcp"
 DATA="/var/lib/omcp"
 MODE="${OMCP_INSTALL_MODE:-nonipv4}"
@@ -13,7 +13,7 @@ if [[ "$MODE" == "nonipv4" && -L /etc/nginx/sites-enabled/omcp ]]; then
   if command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || true; fi
 fi
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-paramiko git curl ca-certificates openjdk-21-jre-headless
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-paramiko git curl ca-certificates openjdk-21-jre-headless mariadb-server
 if [[ "$MODE" == "nonipv4" ]]; then DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client; fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y cpulimit >/dev/null 2>&1 || true
 # Install Java 25 when the configured Ubuntu/Debian repositories provide it; Java 21 remains the baseline.

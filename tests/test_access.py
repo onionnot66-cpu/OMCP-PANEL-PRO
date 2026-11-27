@@ -99,6 +99,23 @@ class AccessTests(unittest.TestCase):
         events = self.call('/api/admin/audit', self.admin)[1]['events']
         self.assertEqual(events[0]['action'], 'server.subuser.saved')
 
+    def test_schedule_crud(self):
+        status, result = self.call('/api/servers/aaaaaaaa/schedules', self.user,
+            {'name': 'Restart daily', 'action': 'restart', 'intervalMinutes': 1440, 'enabled': True})
+        self.assertEqual(status, 200, result)
+        schedule_id = result['schedule']['id']
+        items = self.call('/api/servers/aaaaaaaa/schedules', self.user)[1]['schedules']
+        self.assertEqual(items[0]['name'], 'Restart daily')
+        request = urllib.request.Request(self.base + '/api/servers/aaaaaaaa/schedules/' + schedule_id,
+            method='DELETE', headers={'Authorization': 'Bearer ' + self.user, 'Content-Type': 'application/json'}, data=b'{}')
+        self.assertEqual(urllib.request.urlopen(request).status, 200)
+        self.assertEqual(self.call('/api/servers/aaaaaaaa/schedules', self.user)[1]['schedules'], [])
+
+    def test_database_capability_reported(self):
+        result = self.call('/api/servers/aaaaaaaa/databases', self.user)[1]
+        self.assertIn('available', result)
+        self.assertEqual(result['databases'], [])
+
     @classmethod
     def tearDownClass(cls):
         cls.process.terminate()

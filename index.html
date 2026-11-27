@@ -1,29 +1,611 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OMCP / Control</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#101216;color:#e8ebf1;font:15px system-ui}button,input,select,textarea{font:inherit}button{cursor:pointer;background:#252b35;color:inherit;border:1px solid #394150;border-radius:8px;padding:10px 16px}button:hover{background:#354052}input,select,textarea{background:#151a22;border:1px solid #394150;color:inherit;padding:12px;border-radius:8px;width:100%}label{display:block;color:#b9c3d4;margin:16px 0}label input,label select{margin-top:8px}aside{position:fixed;width:220px;height:100vh;background:#171c24;padding:30px 20px;border-right:1px solid #2c3442}aside strong{font-size:25px;letter-spacing:4px;color:#91e7c9}aside button{display:block;width:100%;text-align:left;margin:16px 0;border:0}main{margin-left:220px;padding:40px;max-width:1450px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:35px}h1{font-size:32px;margin:8px 0}h2{margin-top:0}.muted{color:#97a3b7}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:20px}.card{background:#191f29;border:1px solid #303949;padding:24px;border-radius:14px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.primary{background:#91e7c9;color:#0c241c;border:0}.danger{color:#ff9797}pre{white-space:pre-wrap;overflow:auto;background:#0c0f14;padding:20px;min-height:220px;max-height:460px;border-radius:8px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:25px 0}.auth{max-width:450px;margin:10vh auto}body:has(.auth) main{margin:0;max-width:none}body:has(.auth) aside{display:none}#notice{color:#ffd69b;white-space:pre-wrap;margin:16px 0}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:14px;border-bottom:1px solid #303949}textarea{min-height:330px;font-family:monospace}small{color:#a0acc0}@media(max-width:750px){aside{position:static;width:100%;height:auto;padding:16px}aside button{display:inline-block;width:auto;margin:5px}main{margin:0;padding:20px}}
-</style>
-<aside><strong>OMCP</strong><p class="muted">SERVER CONTROL</p><button id="home">▦ Servers</button><button id="administration">◇ Administration</button><button id="signout">↗ Sign out</button></aside><main><header><div><small>WORKSPACE / CONTROL</small><h1 id="title">Your infrastructure</h1></div><span id="identity"></span></header><div id="notice" role="alert"></div><div id="content"></div></main>
-<script>
-const $=id=>document.getElementById(id), content=$('content');let token=sessionStorage.getItem('omcp-token'),me=null,selected=null,timer=null;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function error(e){$('notice').textContent=e.message||String(e)}
-async function api(path,method='GET',data){const r=await fetch(path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}: {})},body:data===undefined?undefined:JSON.stringify(data)});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d}
-function screen(title,html){clearInterval(timer);$('notice').textContent='';$('title').textContent=title;content.innerHTML=html}
-function form(fields,submit){content.querySelector('form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button[type=submit]');b.disabled=true;try{await submit(Object.fromEntries(new FormData(e.target)))}catch(e){error(e)}finally{b.disabled=false}}}
-function field(name,label,type='text',value=''){return `<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" required></label>`}
-async function auth(){const s=await api('/api/setup/status');screen(s.setupRequired?'Create administrator':'Sign in',`<div class="auth card"><h2>${s.setupRequired?'Welcome to OMCP':'Welcome back'}</h2><p class="muted">Your servers. Your control.</p><form>${field('username','Username')}${s.setupRequired?field('email','Email','email'):''}${field('password','Password','password')}<button type="submit" class="primary">Continue →</button></form></div>`);form([],async d=>{const r=await api(s.setupRequired?'/api/setup':'/api/login','POST',d);token=r.token;sessionStorage.setItem('omcp-token',token);await boot()})}
-async function home(){const d=await api('/api/servers');screen('Your servers',`<div class="row"><p class="muted">Manage your Minecraft infrastructure.</p>${me.role==='admin'?'<button id="create" class="primary">+ Create server</button>':''}</div><div class="grid">${d.servers.map(s=>`<article class="card"><small>${esc(s.software)} / ${esc(s.version)}</small><h2>${esc(s.name)}</h2><p>${esc(s.status)} · ${esc(s.memory)} GB RAM</p><p class="muted">${esc(s.address||'Address not configured')}</p><button data-server="${s.id}">Open workspace →</button></article>`).join('')||'<p>No servers yet.</p>'}</div>`);content.querySelectorAll('[data-server]').forEach(b=>b.onclick=()=>{selected=d.servers.find(s=>s.id===b.dataset.server);workspace().catch(error)});if($('create'))$('create').onclick=create}
-function create(){screen('Create server',`<div class="card"><p class="muted">Node: Local Node — this panel host</p><form>${field('name','Server name')}${field('version','Minecraft version','text','1.21.1')}<label>Software<select name="software">${['paper','purpur','folia','fabric','vanilla','spigot','velocity','waterfall'].map(x=>`<option>${x}</option>`).join('')}</select></label>${field('memory','RAM (GB)','number','2')}${field('port','Port','number','25565')}<label><input style="width:auto" type="checkbox" name="eulaAccepted" required> I accept the Minecraft EULA</label><button type="submit" class="primary">Create on Local Node</button></form></div>`);form([],async d=>{await api('/api/servers','POST',{...d,nodeId:'local',memory:Number(d.memory),port:Number(d.port),eulaAccepted:!!d.eulaAccepted});await home()})}
-const route=tail=>'/api/servers/'+selected.id+'/'+tail;
-async function workspace(tab='console'){screen(selected.name,`<div class="row"><small>${esc(selected.software)} · ${esc(selected.version)}</small>${['start','restart','stop'].map(a=>`<button data-power="${a}">${a}</button>`).join('')}</div><nav class="tabs">${['console','files','sftp','backups','settings'].map(t=>`<button data-tab="${t}">${t}</button>`).join('')}</nav><section id="pane" class="card"></section>`);content.querySelectorAll('[data-power]').forEach(b=>b.onclick=async()=>{try{await api(route(b.dataset.power),'POST',{});$('notice').textContent='Power command sent'}catch(e){error(e)}});content.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>workspace(b.dataset.tab).catch(error));const pane=$('pane');
-if(tab==='console'){pane.innerHTML='<pre id="logs">Loading console…</pre><form class="row"><input name="command" placeholder="Enter a console command" required><button type="submit">Send command</button></form>';form([],async d=>{await api(route('command'),'POST',d);content.querySelector('input[name=command]').value=''});const poll=async()=>{try{const d=await api(route('logs'));if($('logs'))$('logs').textContent=d.logs||d.log||JSON.stringify(d,null,2)}catch(e){error(e)}};await poll();timer=setInterval(poll,3000)}
-if(tab==='files')await files('');
-if(tab==='sftp'){const d=await api(route('sftp'));pane.innerHTML=`<h2>SFTP access</h2><p>Host: ${esc(d.host)} · Port: ${esc(d.port)}</p><p>Username: ${esc(d.username)}</p><p class="muted">Fingerprint: ${esc(d.fingerprint)}</p><button id="credentials">Generate / reset password</button><pre id="credentialsResult">Passwords are shown only when generated.</pre>`;$('credentials').onclick=async()=>{try{$('credentialsResult').textContent=JSON.stringify(await api(route('sftp/reset'),'POST',{}),null,2)}catch(e){error(e)}}}
-if(tab==='backups'){const d=await api('/api/backups');pane.innerHTML='<h2>Backups</h2><button id="backup">Create backup</button><pre>'+esc(JSON.stringify(d,null,2))+'</pre>';$('backup').onclick=async()=>{try{await api(route('backup'),'POST',{});await workspace('backups')}catch(e){error(e)}}}
-if(tab==='settings'){const d=await api(route('settings'));pane.innerHTML=`<h2>Server settings</h2><form>${field('name','Server name','text',selected.name)}${field('memory','RAM (GB)','number',selected.memory)}${field('cpuLimit','CPU limit (0 = unlimited)','number',selected.cpuLimit||0)}<button type="submit" class="primary">Save settings</button></form><details><summary>Runtime configuration</summary><pre>${esc(JSON.stringify(d,null,2))}</pre></details>`;form([],async v=>{await api(route('settings'),'POST',{...v,memory:Number(v.memory),cpuLimit:Number(v.cpuLimit)});$('notice').textContent='Settings saved'})}}
-async function files(path){const d=await api(route('files')+'?path='+encodeURIComponent(path));const pane=$('pane');pane.innerHTML=`<h2>Files / ${esc(path)}</h2><button id="parent">← Parent</button>`;if(d.entries){pane.innerHTML+=`<table>${d.entries.map((f,i)=>`<tr><td><button data-file="${i}">${f.directory?'▣':'▤'} ${esc(f.name)}</button></td><td>${f.size} bytes</td></tr>`).join('')}</table>`;pane.querySelectorAll('[data-file]').forEach(b=>b.onclick=()=>files([path,d.entries[Number(b.dataset.file)].name].filter(Boolean).join('/')).catch(error))}else{pane.innerHTML+='<textarea id="editor" spellcheck="false"></textarea><button id="save" class="primary">Save file</button>';$('editor').value=d.content||'';$('save').onclick=async()=>{try{await api(route('files'),'POST',{path,content:$('editor').value});$('notice').textContent='File saved'}catch(e){error(e)}}}$('parent').onclick=()=>files(path.split('/').slice(0,-1).join('/')).catch(error)}
-async function admin(){if(me.role!=='admin')return;const [u,s,m]=await Promise.all([api('/api/users'),api('/api/servers'),api('/api/admin/metadata')]);screen('Administration',`<div class="grid"><div class="card"><h2>${u.users.length}</h2>Users</div><div class="card"><h2>${s.servers.length}</h2>Servers</div><div class="card"><h2>${m.nodes.length}</h2>Nodes</div></div><h2 style="margin-top:30px">Users</h2><div class="card"><table><tr><th>Username</th><th>Email</th><th>Role</th></tr>${u.users.map(x=>`<tr><td>${esc(x.username)}</td><td>${esc(x.email)}</td><td>${esc(x.role)}</td></tr>`).join('')}</table><button id="addUser">+ Create user</button></div><h2 style="margin-top:30px">Nodes</h2><div class="grid">${m.nodes.map(n=>`<div class="card"><h2>${esc(n.name)}</h2><p>${esc(n.address)}</p><p>${n.id==='local'?'Local execution available':'Connector not connected'}</p></div>`).join('')}</div>`);$('addUser').onclick=()=>{screen('Create user',`<form class="card">${field('username','Username')}${field('email','Email','email')}${field('password','Password','password')}<button type="submit" class="primary">Create user</button></form>`);form([],async d=>{await api('/api/users','POST',d);await admin()})}}
-async function boot(){if(!token)return auth();try{me=(await api('/api/me')).user}catch(e){token=null;sessionStorage.removeItem('omcp-token');return auth()}$('identity').textContent=me.username;$('administration').hidden=me.role!=='admin';await home()}
-$('home').onclick=()=>home().catch(error);$('administration').onclick=()=>admin().catch(error);$('signout').onclick=async()=>{try{await api('/api/logout','POST',{})}finally{token=null;sessionStorage.removeItem('omcp-token');auth().catch(error)}};boot().catch(error);
-</script></html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>OMCP / Control</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #101216;
+      color: #e8ebf1;
+      font: 15px system-ui;
+    }
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+    button {
+      cursor: pointer;
+      background: #252b35;
+      color: inherit;
+      border: 1px solid #394150;
+      border-radius: 8px;
+      padding: 10px 16px;
+    }
+    button:hover {
+      background: #354052;
+    }
+    input,
+    select,
+    textarea {
+      background: #151a22;
+      border: 1px solid #394150;
+      color: inherit;
+      padding: 12px;
+      border-radius: 8px;
+      width: 100%;
+    }
+    label {
+      display: block;
+      color: #b9c3d4;
+      margin: 16px 0;
+    }
+    label input,
+    label select {
+      margin-top: 8px;
+    }
+    aside {
+      position: fixed;
+      width: 220px;
+      height: 100vh;
+      background: #171c24;
+      padding: 30px 20px;
+      border-right: 1px solid #2c3442;
+    }
+    aside strong {
+      font-size: 25px;
+      letter-spacing: 4px;
+      color: #91e7c9;
+    }
+    aside button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin: 16px 0;
+      border: 0;
+    }
+    main {
+      margin-left: 220px;
+      padding: 40px;
+      max-width: 1450px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 35px;
+    }
+    h1 {
+      font-size: 32px;
+      margin: 8px 0;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    .muted {
+      color: #97a3b7;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: #191f29;
+      border: 1px solid #303949;
+      padding: 24px;
+      border-radius: 14px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .primary {
+      background: #91e7c9;
+      color: #0c241c;
+      border: 0;
+    }
+    .danger {
+      color: #ff9797;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow: auto;
+      background: #0c0f14;
+      padding: 20px;
+      min-height: 220px;
+      max-height: 460px;
+      border-radius: 8px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 25px 0;
+    }
+    .auth {
+      max-width: 450px;
+      margin: 10vh auto;
+    }
+    body:has(.auth) main {
+      margin: 0;
+      max-width: none;
+    }
+    body:has(.auth) aside {
+      display: none;
+    }
+    #notice {
+      color: #ffd69b;
+      white-space: pre-wrap;
+      margin: 16px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    td,
+    th {
+      text-align: left;
+      padding: 14px;
+      border-bottom: 1px solid #303949;
+    }
+    textarea {
+      min-height: 330px;
+      font-family: monospace;
+    }
+    small {
+      color: #a0acc0;
+    }
+    @media (max-width: 750px) {
+      aside {
+        position: static;
+        width: 100%;
+        height: auto;
+        padding: 16px;
+      }
+      aside button {
+        display: inline-block;
+        width: auto;
+        margin: 5px;
+      }
+      main {
+        margin: 0;
+        padding: 20px;
+      }
+    }
+  </style>
+  <aside>
+    <strong>OMCP</strong>
+    <p class="muted">SERVER CONTROL</p>
+    <button id="home">▦ Servers</button
+    ><button id="administration">◇ Administration</button
+    ><button id="signout">↗ Sign out</button>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <small>WORKSPACE / CONTROL</small>
+        <h1 id="title">Your infrastructure</h1>
+      </div>
+      <span id="identity"></span>
+    </header>
+    <div id="notice" role="alert"></div>
+    <div id="content"></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id),
+      content = $("content");
+    let token = sessionStorage.getItem("omcp-token"),
+      me = null,
+      selected = null,
+      timer = null;
+    const esc = (v) =>
+      String(v ?? "").replace(
+        /[&<>"']/g,
+        (c) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[c],
+      );
+    function error(e) {
+      $("notice").textContent = e.message || String(e);
+    }
+    async function api(path, method = "GET", data) {
+      const r = await fetch(path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
+        body: data === undefined ? undefined : JSON.stringify(data),
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || "Request failed");
+      return d;
+    }
+    async function download(path) {
+      const response = await fetch(path, { headers: { Authorization: "Bearer " + token } });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw Error(data.error || "Download failed"); }
+      const blob = await response.blob(); const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^";]+?)(?:"|;|$)/); const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob); link.download = match ? match[1] : "download"; link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }
+    function screen(title, html) {
+      clearInterval(timer);
+      $("notice").textContent = "";
+      $("title").textContent = title;
+      content.innerHTML = html;
+    }
+    function form(fields, submit) {
+      content.querySelector("form").onsubmit = async (e) => {
+        e.preventDefault();
+        const b = e.target.querySelector("button[type=submit]");
+        b.disabled = true;
+        try {
+          await submit(Object.fromEntries(new FormData(e.target)));
+        } catch (e) {
+          error(e);
+        } finally {
+          b.disabled = false;
+        }
+      };
+    }
+    function field(name, label, type = "text", value = "") {
+      return `<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" required></label>`;
+    }
+    async function auth() {
+      const s = await api("/api/setup/status");
+      screen(
+        s.setupRequired ? "Create administrator" : "Sign in",
+        `<div class="auth card"><h2>${s.setupRequired ? "Welcome to OMCP" : "Welcome back"}</h2><p class="muted">Your servers. Your control.</p><form>${field("username", "Username")}${s.setupRequired ? field("email", "Email", "email") : ""}${field("password", "Password", "password")}<button type="submit" class="primary">Continue →</button></form></div>`,
+      );
+      form([], async (d) => {
+        const r = await api(
+          s.setupRequired ? "/api/setup" : "/api/login",
+          "POST",
+          d,
+        );
+        token = r.token;
+        sessionStorage.setItem("omcp-token", token);
+        await boot();
+      });
+    }
+    async function home() {
+      const d = await api("/api/servers");
+      screen(
+        "Your servers",
+        `<div class="row"><p class="muted">Manage your Minecraft infrastructure.</p>${me.role === "admin" ? '<button id="create" class="primary">+ Create server</button>' : ""}</div><div class="grid">${d.servers.map((s) => `<article class="card"><small>${esc(s.software)} / ${esc(s.version)}</small><h2>${esc(s.name)}</h2><p>${esc(s.status)} · ${esc(s.memory)} GB RAM</p><p class="muted">${esc(s.address || "Address not configured")}</p><button data-server="${s.id}">Open workspace →</button></article>`).join("") || "<p>No servers yet.</p>"}</div>`,
+      );
+      content.querySelectorAll("[data-server]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            selected = d.servers.find((s) => s.id === b.dataset.server);
+            workspace().catch(error);
+          }),
+      );
+      if ($("create")) $("create").onclick = () => create().catch(error);
+    }
+    async function create() {
+      const users = (await api("/api/users")).users;
+      screen(
+        "Create server",
+        `<div class="card"><p class="muted">Node: Local Node — this panel host</p><form>${field("name", "Server name")}${field("version", "Minecraft version", "text", "1.21.1")}<label>Owner<select name="owner">${users.map((u) => `<option value="${esc(u.username)}">${esc(u.username)} (${esc(u.email)})</option>`).join("")}</select></label><label>Server template / software<select name="software">${["paper", "purpur", "folia", "fabric", "vanilla", "spigot", "velocity", "waterfall"].map((x) => `<option>${x}</option>`).join("")}</select></label>${field("memory", "RAM (GB)", "number", "2")}${field("cpuLimit", "CPU limit (0 = unlimited)", "number", "0")}${field("port", "Port", "number", "25565")}<label><input style="width:auto" type="checkbox" name="eulaAccepted" required> I accept the Minecraft EULA</label><button type="submit" class="primary">Create on Local Node</button></form></div>`,
+      );
+      form([], async (d) => {
+        await api("/api/servers", "POST", {
+          ...d,
+          nodeId: "local",
+          memory: Number(d.memory),
+          cpuLimit: Number(d.cpuLimit),
+          port: Number(d.port),
+          eulaAccepted: !!d.eulaAccepted,
+        });
+        await home();
+      });
+    }
+    const route = (tail) => "/api/servers/" + selected.id + "/" + tail;
+    async function workspace(tab = "console") {
+      screen(
+        selected.name,
+        `<div class="row"><small>${esc(selected.software)} · ${esc(selected.version)}</small>${["start", "restart", "stop"].map((a) => `<button data-power="${a}">${a}</button>`).join("")}</div><nav class="tabs">${["console", "files", "worlds", "players", "plugins", "backups", "schedules", "databases", "subusers", "sftp", "settings"].map((t) => `<button data-tab="${t}">${t}</button>`).join("")}</nav><section id="pane" class="card"></section>`,
+      );
+      content.querySelectorAll("[data-power]").forEach(
+        (b) =>
+          (b.onclick = async () => {
+            try {
+              await api(route(b.dataset.power), "POST", {});
+              $("notice").textContent = "Power command sent";
+            } catch (e) {
+              error(e);
+            }
+          }),
+      );
+      content
+        .querySelectorAll("[data-tab]")
+        .forEach(
+          (b) => (b.onclick = () => workspace(b.dataset.tab).catch(error)),
+        );
+      const pane = $("pane");
+      if (tab === "console") {
+        pane.innerHTML =
+          '<pre id="logs">Loading console…</pre><form class="row"><input name="command" placeholder="Enter a console command" required><button type="submit">Send command</button></form>';
+        form([], async (d) => {
+          await api(route("command"), "POST", d);
+          content.querySelector("input[name=command]").value = "";
+        });
+        const poll = async () => {
+          try {
+            const d = await api(route("logs"));
+            if ($("logs"))
+              $("logs").textContent =
+                d.logs || d.log || JSON.stringify(d, null, 2);
+          } catch (e) {
+            error(e);
+          }
+        };
+        await poll();
+        timer = setInterval(poll, 3000);
+      }
+      if (tab === "files") await files("");
+      if (tab === "worlds") {
+        const d = await api(route("worlds"));
+        pane.innerHTML = `<h2>Worlds</h2><p class="muted">${d.running ? "Server is running" : "Server is stopped"}</p><table><tr><th>Name</th><th>Size</th><th>Active</th></tr>${d.worlds.map((w) => `<tr><td>${esc(w.name)}</td><td>${w.bytes || w.size || 0} bytes</td><td>${w.active ? "Yes" : "No"}</td></tr>`).join("")}</table>`;
+      }
+      if (tab === "players") {
+        const d = await api(route("players"));
+        pane.innerHTML = `<h2>Players</h2><p>Online: ${esc((d.players || []).map((p) => p.name).join(", ") || "None")} (${d.onlineCount || 0}/${d.maxPlayers || 0})</p><details><summary>Banned players</summary><pre>${esc(JSON.stringify(d.banned || [], null, 2))}</pre></details>`;
+      }
+      if (tab === "plugins") {
+        pane.innerHTML = `<h2>Plugin installer</h2><form>${field("query", "Search Modrinth plugins")}<button class="primary" type="submit">Search</button></form><div id="pluginResults"></div>`;
+        form([], async (v) => {
+          const d = await api(route("plugins/search") + "?source=modrinth&q=" + encodeURIComponent(v.query));
+          $("pluginResults").innerHTML = `<div class="grid">${(d.plugins || []).map((p) => `<article class="card"><h3>${esc(p.title || p.name)}</h3><p>${esc(p.description || "")}</p><button data-plugin="${esc(p.id || p.projectId)}">Install compatible release</button></article>`).join("") || "No compatible plugins found."}</div>`;
+          $("pluginResults").querySelectorAll("[data-plugin]").forEach((b) => b.onclick = async () => {
+            try { const releases = await api(route("plugins/versions") + "?source=modrinth&id=" + encodeURIComponent(b.dataset.plugin)); if (!releases.recommended) throw Error("No compatible release found"); await api(route("plugins/install"), "POST", { projectId: b.dataset.plugin, versionId: releases.recommended, source: "modrinth" }); $("notice").textContent = "Plugin installed. Restart the server to load it."; }
+            catch (e) { error(e); }
+          });
+        });
+      }
+      if (tab === "sftp") {
+        const d = await api(route("sftp"));
+        pane.innerHTML = `<h2>SFTP access</h2><p>Host: ${esc(d.host)} · Port: ${esc(d.port)}</p><p>Username: ${esc(d.username)}</p><p class="muted">Fingerprint: ${esc(d.fingerprint)}</p><button id="credentials">Generate / reset password</button><pre id="credentialsResult">Passwords are shown only when generated.</pre>`;
+        $("credentials").onclick = async () => {
+          try {
+            $("credentialsResult").textContent = JSON.stringify(
+              await api(route("sftp/reset"), "POST", {}),
+              null,
+              2,
+            );
+          } catch (e) {
+            error(e);
+          }
+        };
+      }
+      if (tab === "backups") {
+        const d = await api(route("backups"));
+        pane.innerHTML = `<h2>Backups</h2><button id="backup">Create backup</button><table><tr><th>Name</th><th>Size</th><th>Actions</th></tr>${d.backups.map((b) => `<tr><td>${esc(b.displayName)}</td><td>${b.bytes} bytes</td><td><button data-restore-backup="${esc(b.name)}">Restore</button> <button class="danger" data-delete-backup="${esc(b.name)}">Delete</button></td></tr>`).join("")}</table>`;
+        $("backup").onclick = async () => {
+          try {
+            await api(route("backup"), "POST", {});
+            await workspace("backups");
+          } catch (e) {
+            error(e);
+          }
+        };
+        pane.querySelectorAll("[data-restore-backup]").forEach((b) => b.onclick = async () => {
+          if (!confirm("Stop the server and replace its files with this backup? A safety backup will be created.")) return;
+          try { await api("/api/backups/" + encodeURIComponent(b.dataset.restoreBackup) + "/restore", "POST", {}); $("notice").textContent = "Backup restored"; }
+          catch (e) { error(e); }
+        });
+        pane.querySelectorAll("[data-delete-backup]").forEach((b) => b.onclick = async () => {
+          if (!confirm("Delete this backup permanently?")) return;
+          try { await api("/api/backups/" + encodeURIComponent(b.dataset.deleteBackup) + "/delete", "POST", {}); await workspace("backups"); }
+          catch (e) { error(e); }
+        });
+      }
+      if (tab === "schedules") {
+        const d = await api(route("schedules"));
+        pane.innerHTML = `<h2>Schedules</h2><form>${field("name", "Schedule name")}<label>Action<select name="action"><option>start</option><option>stop</option><option>restart</option><option>command</option><option>backup</option></select></label>${field("payload", "Console command (only for command)", "text", "say Scheduled task")}${field("intervalMinutes", "Run every (minutes)", "number", "60")}<button class="primary" type="submit">Create schedule</button></form><table>${d.schedules.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(s.action)}</td><td>Every ${s.intervalMinutes} minutes</td><td>${esc(s.lastStatus || "Waiting")}</td><td><button data-delete-schedule="${s.id}">Delete</button></td></tr>`).join("")}</table>`;
+        form([], async (v) => {
+          await api(route("schedules"), "POST", {
+            ...v,
+            intervalMinutes: Number(v.intervalMinutes),
+            enabled: true,
+          });
+          await workspace("schedules");
+        });
+        pane.querySelectorAll("[data-delete-schedule]").forEach(
+          (b) =>
+            (b.onclick = async () => {
+              await api(route("schedules/" + b.dataset.deleteSchedule), "DELETE", {});
+              await workspace("schedules");
+            }),
+        );
+      }
+      if (tab === "databases") {
+        const d = await api(route("databases"));
+        pane.innerHTML = `<h2>Databases</h2><p class="muted">${d.available ? "MariaDB is available." : "MariaDB support is not installed on this host."}</p><form>${field("name", "Database name", "text", "minecraft")}<button class="primary" type="submit" ${d.available ? "" : "disabled"}>Create database</button></form><div id="databaseSecret"></div><table>${d.databases.map((x) => `<tr><td>${esc(x.name)}</td><td>${esc(x.username)}</td><td>${esc(x.host)}:${x.port}</td><td><button data-delete-database="${x.id}">Delete</button></td></tr>`).join("")}</table>`;
+        form([], async (v) => {
+          const result = await api(route("databases"), "POST", v);
+          $("databaseSecret").innerHTML = `<pre>${esc(JSON.stringify(result.database, null, 2))}</pre><p>Save the password now. It will not be shown again.</p>`;
+        });
+        pane.querySelectorAll("[data-delete-database]").forEach(
+          (b) =>
+            (b.onclick = async () => {
+              if (!confirm("Permanently delete this database?")) return;
+              await api(route("databases/" + b.dataset.deleteDatabase), "DELETE", {});
+              await workspace("databases");
+            }),
+        );
+      }
+      if (tab === "subusers") {
+        const d = await api(route("subusers"));
+        pane.innerHTML = `<h2>Subusers</h2><p>Owner: ${esc(d.owner || "Administrator")}</p><form><label>Panel user<select name="username">${d.availableUsers.map((u) => `<option value="${esc(u.username)}">${esc(u.username)} (${esc(u.email)})</option>`).join("")}</select></label><label>Permissions<select name="permissions" multiple size="${Math.min(12, d.availablePermissions.length)}">${d.availablePermissions.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}</select></label><button class="primary" type="submit">Add / update subuser</button></form><table>${d.members.map((x) => `<tr><td>${esc(x.username)}</td><td>${esc(x.permissions.join(", "))}</td><td><button data-delete-member="${esc(x.username)}">Remove</button></td></tr>`).join("")}</table>`;
+        content.querySelector("form").onsubmit = async (event) => {
+          event.preventDefault();
+          const formElement = event.target;
+          const permissions = [...formElement.permissions.selectedOptions].map((o) => o.value);
+          try {
+            await api(route("subusers"), "POST", { username: formElement.username.value, permissions });
+            await workspace("subusers");
+          } catch (e) { error(e); }
+        };
+        pane.querySelectorAll("[data-delete-member]").forEach(
+          (b) =>
+            (b.onclick = async () => {
+              await api(route("subusers/" + encodeURIComponent(b.dataset.deleteMember)), "DELETE", {});
+              await workspace("subusers");
+            }),
+        );
+      }
+      if (tab === "settings") {
+        const d = await api(route("settings"));
+        pane.innerHTML = `<h2>Server settings</h2><form>${field("name", "Server name", "text", selected.name)}${field("memory", "RAM (GB)", "number", selected.memory)}${field("cpuLimit", "CPU limit (0 = unlimited)", "number", selected.cpuLimit || 0)}<button type="submit" class="primary">Save settings</button></form><details><summary>Runtime configuration</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+        form([], async (v) => {
+          await api(route("settings"), "POST", {
+            ...v,
+            memory: Number(v.memory),
+            cpuLimit: Number(v.cpuLimit),
+          });
+          $("notice").textContent = "Settings saved";
+        });
+      }
+    }
+    async function files(path) {
+      const d = await api(route("files") + "?path=" + encodeURIComponent(path));
+      const pane = $("pane");
+      pane.innerHTML = `<h2>Files / ${esc(path)}</h2><div class="row"><button id="parent">← Parent</button><button id="mkdir">New folder</button><label style="margin:0"><span class="primary" style="display:inline-block;padding:10px 16px;border-radius:8px;color:#0c241c">Upload file</span><input id="upload" type="file" hidden></label></div>`;
+      if (d.entries) {
+        pane.innerHTML += `<table>${d.entries.map((f, i) => `<tr><td><button data-file="${i}">${f.directory ? "▣" : "▤"} ${esc(f.name)}</button></td><td>${f.size} bytes</td><td>${f.directory ? "" : `<button data-download="${i}">Download</button>`} <button data-archive="${i}">Archive</button> <button class="danger" data-delete-file="${i}">Delete</button></td></tr>`).join("")}</table>`;
+        pane
+          .querySelectorAll("[data-file]")
+          .forEach(
+            (b) =>
+              (b.onclick = () =>
+                files(
+                  [path, d.entries[Number(b.dataset.file)].name]
+                    .filter(Boolean)
+                    .join("/"),
+                ).catch(error)),
+          );
+        pane.querySelectorAll("[data-archive]").forEach((b) => b.onclick = async () => {
+          const target = [path, d.entries[Number(b.dataset.archive)].name].filter(Boolean).join("/");
+          try { await api(route("archive"), "POST", { path: target }); await files(path); } catch (e) { error(e); }
+        });
+        pane.querySelectorAll("[data-download]").forEach((b) => b.onclick = async () => {
+          const target = [path, d.entries[Number(b.dataset.download)].name].filter(Boolean).join("/");
+          try { await download(route("download") + "?path=" + encodeURIComponent(target)); } catch (e) { error(e); }
+        });
+        pane.querySelectorAll("[data-delete-file]").forEach((b) => b.onclick = async () => {
+          const target = [path, d.entries[Number(b.dataset.deleteFile)].name].filter(Boolean).join("/");
+          if (!confirm("Delete " + target + "?")) return;
+          try { await api(route("files"), "DELETE", { paths: [target] }); await files(path); } catch (e) { error(e); }
+        });
+      } else {
+        pane.innerHTML +=
+          '<textarea id="editor" spellcheck="false"></textarea><button id="save" class="primary">Save file</button>';
+        $("editor").value = d.content || "";
+        $("save").onclick = async () => {
+          try {
+            await api(route("files"), "POST", {
+              path,
+              content: $("editor").value,
+            });
+            $("notice").textContent = "File saved";
+          } catch (e) {
+            error(e);
+          }
+        };
+      }
+      $("parent").onclick = () =>
+        files(path.split("/").slice(0, -1).join("/")).catch(error);
+      $("mkdir").onclick = async () => {
+        const name = prompt("Folder name"); if (!name) return;
+        try { await api(route("mkdir"), "POST", { path: [path, name].filter(Boolean).join("/") }); await files(path); } catch (e) { error(e); }
+      };
+      $("upload").onchange = async (event) => {
+        const file = event.target.files[0]; if (!file) return;
+        const target = [path, file.name].filter(Boolean).join("/"); let offset = 0;
+        try {
+          while (offset < file.size) {
+            const bytes = new Uint8Array(await file.slice(offset, offset + 450000).arrayBuffer());
+            let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
+            await api(route("upload"), "POST", { path: target, offset, truncate: offset === 0, chunk: btoa(binary) }); offset += bytes.length;
+            $("notice").textContent = `Uploading ${file.name}: ${Math.round(offset / file.size * 100)}%`;
+          }
+          await files(path);
+        } catch (e) { error(e); }
+      };
+    }
+    async function admin() {
+      if (me.role !== "admin") return;
+      const [u, s, m, audit] = await Promise.all([
+        api("/api/users"),
+        api("/api/servers"),
+        api("/api/admin/metadata"),
+        api("/api/admin/audit?limit=50"),
+      ]);
+      screen(
+        "Administration",
+        `<div class="grid"><div class="card"><h2>${u.users.length}</h2>Users</div><div class="card"><h2>${s.servers.length}</h2>Servers</div><div class="card"><h2>${m.nodes.length}</h2>Nodes</div></div><h2 style="margin-top:30px">Users</h2><div class="card"><table><tr><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr>${u.users.map((x) => `<tr><td>${esc(x.username)}</td><td>${esc(x.email)}</td><td>${esc(x.role)}</td><td><button data-edit-user="${esc(x.username)}">Edit</button> <button class="danger" data-delete-user="${esc(x.username)}">Delete</button></td></tr>`).join("")}</table><button id="addUser">+ Create user</button></div><h2 style="margin-top:30px">Nodes</h2><div class="grid">${m.nodes.map((n) => `<div class="card"><h2>${esc(n.name)}</h2><p>${esc(n.address)}</p><p>${n.id === "local" ? "Local execution available" : "Connector not connected"}</p></div>`).join("")}</div><h2 style="margin-top:30px">Activity</h2><div class="card"><table><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr>${audit.events.map((e) => `<tr><td>${new Date(e.time * 1000).toLocaleString()}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td><td>${esc(e.target)}</td></tr>`).join("")}</table></div>`,
+      );
+      $("addUser").onclick = () => {
+        screen(
+          "Create user",
+          `<form class="card">${field("username", "Username")}${field("email", "Email", "email")}${field("password", "Password", "password")}<button type="submit" class="primary">Create user</button></form>`,
+        );
+        form([], async (d) => {
+          await api("/api/users", "POST", d);
+          await admin();
+        });
+      };
+      content.querySelectorAll("[data-edit-user]").forEach((button) => button.onclick = () => {
+        const user = u.users.find((x) => x.username === button.dataset.editUser);
+        screen("Edit user", `<form class="card">${field("newUsername", "Username", "text", user.username)}${field("email", "Email", "email", user.email)}<label>Role<select name="role"><option value="user" ${user.role === "user" ? "selected" : ""}>User</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>Administrator</option></select></label><label>New password (optional)<input name="password" type="password"></label><button class="primary" type="submit">Save user</button></form>`);
+        form([], async (data) => { await api("/api/admin/users/update", "POST", { ...data, username: user.username }); await admin(); });
+      });
+      content.querySelectorAll("[data-delete-user]").forEach((button) => button.onclick = async () => {
+        if (!confirm("Delete this panel user?")) return;
+        try { await api("/api/users/" + encodeURIComponent(button.dataset.deleteUser), "DELETE", {}); await admin(); } catch (e) { error(e); }
+      });
+    }
+    async function boot() {
+      if (!token) return auth();
+      try {
+        me = (await api("/api/me")).user;
+      } catch (e) {
+        token = null;
+        sessionStorage.removeItem("omcp-token");
+        return auth();
+      }
+      $("identity").textContent = me.username;
+      $("administration").hidden = me.role !== "admin";
+      await home();
+    }
+    $("home").onclick = () => home().catch(error);
+    $("administration").onclick = () => admin().catch(error);
+    $("signout").onclick = async () => {
+      try {
+        await api("/api/logout", "POST", {});
+      } finally {
+        token = null;
+        sessionStorage.removeItem("omcp-token");
+        auth().catch(error);
+      }
+    };
+    boot().catch(error);
+  </script>
+</html>

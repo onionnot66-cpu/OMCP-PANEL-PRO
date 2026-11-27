@@ -11,7 +11,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 RESET='\033[0m'
 LINE='──────────────────────────────────────────────────────────────────────────────'
-REPO='https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/main'
+REPO='https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/rebuild/omcp-native'
 TMP='/tmp/omcp-menu'
 if [[ "$EUID" -ne 0 ]]; then echo "Run this menu with sudo: sudo bash omcp-menu.sh"; exit 1; fi
 mkdir -p "$TMP"
@@ -272,7 +272,7 @@ NGINX
   echo "=================================================="
 }
 run_install(){
-  local mode="$1" host email script
+  local mode="$1" host="" email="" script
   if [[ "$mode" == "ipv4" ]]; then
     read -r -p "Panel public IPv4 or custom domain: " host
     if [[ -z "$host" ]]; then echo "A public IP or domain is required."; return; fi
