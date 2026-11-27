@@ -36,14 +36,15 @@ func executeJob(j job) (bool,string) {
  }
 }
 
-func pollJob(c config, native *supervisor) error {
+func pollJob(c config, native *supervisor, multi *fleet) error {
  var out struct { Job *job `json:"job"` }
  if err:=call(c,"jobs/claim",c.Credential,map[string]any{"node_id":c.Node},&out); err!=nil {return err}
  if out.Job==nil {return nil}
  j:=*out.Job
  if j.ID=="" || len(j.Lease)!=64 {return fmt.Errorf("invalid job lease")}
  ok,result:=executeJob(j)
- if native!=nil && j.Action!="diagnostic" {ok,result=native.executeJob(j)}
+ if native!=nil && strings.HasPrefix(j.Action,"native.") {ok,result=native.executeJob(j)}
+ if multi!=nil && strings.HasPrefix(j.Action,"instance.") {ok,result=multi.execute(j)}
  var ack struct {OK bool `json:"ok"`}
  if err:=call(c,"jobs/complete",c.Credential,map[string]any{"node_id":c.Node,"id":j.ID,"lease":j.Lease,"success":ok,"result":result},&ack);err!=nil{return err}
  if !ack.OK {return fmt.Errorf("job result not acknowledged")}
