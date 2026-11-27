@@ -16,6 +16,8 @@ type jobPayload struct {
  Port int `json:"port"`
  AcceptEULA bool `json:"accept_eula"`
  Command string `json:"command"`
+ InstanceID string `json:"instance_id"`
+ Memory int `json:"memory_mib"`
 }
 
 func(s *supervisor) executeJob(j job)(bool,string){
