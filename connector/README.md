@@ -84,3 +84,9 @@ For restricted command input, explicitly opt in locally:
 Supported commands: list, save-all, save-all flush, whitelist list, time query daytime, time query gametime, and say followed by a message. Commands are sent to Minecraft stdin, not a shell. No arbitrary plugin commands or line breaks are accepted. A successful job means the command was written, not that Minecraft executed it successfully.
 
 CPU reports the Java process share of the total CPU time exposed by Linux /proc/stat between samples, not a percentage of its cgroup quota. RSS is process resident memory, heap is a JVM setting, filesystem free space is not per-server disk usage. First or unavailable CPU samples are omitted. This remains a trusted single-server admin-only experiment.
+
+## Multiple instance reservation registry (panel foundation)
+
+Admin > Nodes > Configuration > Instance reservations records a UUID, owner, software/version, TCP port, RAM and disk budgets. Reservations are serialized per node, check the configured node budgets, and reject duplicate ports and existing legacy allocations. They are **not** running servers, do not install software and do not enforce kernel quotas. Releasing a reservation only deletes metadata. Nodes with reservations cannot be deleted until reservations are released; deleting an owner unassigns the reservation without deleting it.
+
+Use a separate dedicated node for these records. The legacy allocator and earlier single-server experiment are not coordinated with this registry; do not use them on the same node. The normal dashboard displays only the signed-in owner's reservation metadata, from GET /api/client/omcp/instances. It exposes no native power, files, logs or credentials. Do not grant users runtime access before independent process identities or container isolation and server-scoped job authorization are implemented.
