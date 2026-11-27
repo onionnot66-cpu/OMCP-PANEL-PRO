@@ -58,3 +58,15 @@ With the game and connector stopped, edit supported non-security settings:
 ```
 
 Supported keys: difficulty, gamemode, pvp, white-list, allow-flight, spawn-monsters, hardcore, max-players, view-distance, simulation-distance. The editor refuses unusual Java properties syntax rather than risking corruption. Do not run it while a manually started server is active.
+
+## Admin-created trusted test server
+
+After enrollment, restart the connector under a disposable non-root account with a new, unused server directory whose parent exists:
+
+```bash
+~/.local/bin/omcp-connect --trusted-native-dir "$HOME/omcp-admin-test" --trusted-native-memory 1024 --allow-native-provision
+```
+
+Open Admin > Nodes > Configuration > OMCP Connect. Choose software, type the exact version, select a TCP port, read and accept the Minecraft EULA, and submit Install Minecraft. The job is delivered over the authenticated outbound connector. It cannot choose a different local path or overwrite an existing server. Installation does not start the game automatically. Use Start after a successful job result.
+
+Large downloads can temporarily delay heartbeat updates; do not issue duplicate jobs when a download is in progress. Metrics reports Java RSS when available and filesystem capacity/available space, not per-server disk usage, CPU percentage or enforced limits. Console remains a bounded recent snapshot. These admin-only controls are not wired into the normal user server list, and the single trusted account is not a sandbox.
