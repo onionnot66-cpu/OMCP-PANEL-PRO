@@ -15,6 +15,7 @@ type jobPayload struct {
  Version string `json:"version"`
  Port int `json:"port"`
  AcceptEULA bool `json:"accept_eula"`
+ Command string `json:"command"`
 }
 
 func(s *supervisor) executeJob(j job)(bool,string){
@@ -28,13 +29,14 @@ func(s *supervisor) executeJob(j job)(bool,string){
   err:=downloadMinecraft([]string{"--software",p.Software,"--version",p.Version,"--dir",s.dir,"--port",strconv.Itoa(p.Port),"--accept-eula"})
   if err!=nil{return false,err.Error()}
   return true,"Minecraft installed in configured directory; not started"
+ case "native.command":return s.command(j.Payload.Command)
  case "native.metrics":
   return s.metrics()
  default:return s.execute(j.Action)
  }
 }
 
-func(s *supervisor) metrics()(bool,string){
+func(s *supervisor) metricReport()map[string]any{
  running:=s.running()
  report:=map[string]any{"process_running":running,"java_heap_limit_mib":s.memory}
  path:=s.dir
@@ -55,7 +57,12 @@ func(s *supervisor) metrics()(bool,string){
    }
   }
  }
- b,err:=json.Marshal(report)
+ if cpu,ok:=s.cpuPercent();ok{report["cpu_host_percent"]=cpu}
+ return report
+}
+
+func(s *supervisor) metrics()(bool,string){
+ b,err:=json.Marshal(s.metricReport())
  if err!=nil{return false,"metrics serialization failed"}
  return true,string(b)
 }
