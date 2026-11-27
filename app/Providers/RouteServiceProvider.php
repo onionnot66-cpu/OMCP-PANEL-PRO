@@ -59,6 +59,9 @@ class RouteServiceProvider extends ServiceProvider
                     ->group(base_path('routes/api-client.php'));
             });
 
+            Route::prefix('/api/omcp/v1')
+                ->group(base_path('routes/api-omcp.php'));
+
             Route::middleware('daemon')
                 ->prefix('/api/remote')
                 ->scopeBindings()
