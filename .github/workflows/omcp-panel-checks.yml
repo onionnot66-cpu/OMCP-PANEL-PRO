@@ -75,7 +75,7 @@ jobs:
           echo "APP_KEY=$APP_KEY" >> "$GITHUB_ENV"
           php artisan package:discover --ansi
       - name: Connector integration tests
-        run: vendor/bin/phpunit tests/Integration/Omcp/ConnectorProtocolTest.php
+        run: vendor/bin/phpunit tests/Integration/Omcp
       - name: Frontend build
         run: |
           npm install --global yarn@1.22.22
