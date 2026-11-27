@@ -37,7 +37,7 @@ class ConnectionController extends Controller
         $token = $this->token($request);
         $data = $request->validate([
             'node_id' => 'required|integer|min:1',
-            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision',
+            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision,fleet_files',
             'capabilities.os' => 'required|string|max:32',
             'capabilities.arch' => 'required|string|max:32',
             'capabilities.cpus' => 'required|integer|min:1|max:65536',
@@ -50,6 +50,7 @@ class ConnectionController extends Controller
             'capabilities.native_console_input' => 'sometimes|boolean',
             'capabilities.fleet_enabled' => 'sometimes|boolean',
             'capabilities.fleet_provision' => 'sometimes|boolean',
+            'capabilities.fleet_files' => 'sometimes|boolean',
             'telemetry' => 'sometimes|array:console,metrics',
             'telemetry.console' => 'required_with:telemetry|string|max:3500',
             'telemetry.metrics' => 'required_with:telemetry|array:process_running,java_heap_limit_mib,filesystem_available_bytes,filesystem_capacity_bytes,java_rss_bytes,cpu_host_percent',
