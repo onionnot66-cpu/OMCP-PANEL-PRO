@@ -70,3 +70,17 @@ After enrollment, restart the connector under a disposable non-root account with
 Open Admin > Nodes > Configuration > OMCP Connect. Choose software, type the exact version, select a TCP port, read and accept the Minecraft EULA, and submit Install Minecraft. The job is delivered over the authenticated outbound connector. It cannot choose a different local path or overwrite an existing server. Installation does not start the game automatically. Use Start after a successful job result.
 
 Large downloads can temporarily delay heartbeat updates; do not issue duplicate jobs when a download is in progress. Metrics reports Java RSS when available and filesystem capacity/available space, not per-server disk usage, CPU percentage or enforced limits. Console remains a bounded recent snapshot. These admin-only controls are not wired into the normal user server list, and the single trusted account is not a sandbox.
+
+## Automatic console refresh and resource metrics
+
+The native supervisor now sends a bounded recent console snapshot and resource metrics with its authenticated heartbeat, approximately every five seconds when idle. The admin node Configuration page refreshes that snapshot without creating new jobs. The panel retains the latest snapshot only; manual console jobs still store a bounded result. Treat logs as sensitive. A download or other long-running job can delay heartbeats and console updates. This is polling, not a lossless WebSocket stream.
+
+For restricted command input, explicitly opt in locally:
+
+```bash
+~/.local/bin/omcp-connect --trusted-native-dir "$HOME/omcp-admin-test" --trusted-native-memory 1024 --allow-native-console
+```
+
+Supported commands: list, save-all, save-all flush, whitelist list, time query daytime, time query gametime, and say followed by a message. Commands are sent to Minecraft stdin, not a shell. No arbitrary plugin commands or line breaks are accepted. A successful job means the command was written, not that Minecraft executed it successfully.
+
+CPU reports the Java process share of the total CPU time exposed by Linux /proc/stat between samples, not a percentage of its cgroup quota. RSS is process resident memory, heap is a JVM setting, filesystem free space is not per-server disk usage. First or unavailable CPU samples are omitted. This remains a trusted single-server admin-only experiment.
