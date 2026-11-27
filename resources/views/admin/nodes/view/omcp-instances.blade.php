@@ -84,11 +84,112 @@
         </div>
     </div>
 </div>
+@if ($instances->isNotEmpty())
+<div class="box box-primary">
+    <div class="box-header with-border"><h3 class="box-title">Offline File Manager</h3></div>
+    <div class="box-body">
+        <p>Admin-only, requires stopped instance and local file opt-in. Text files up to 2 KiB; new/delete restricted to notes-*.txt. Do not put secrets in managed files.</p>
+        <label for="fleetFileInstance">Instance</label>
+        <select id="fleetFileInstance" class="form-control">
+            @foreach ($instances as $instance)
+                <option value="{{ route('admin.nodes.omcp.instances.files', [$node->id, $instance->id]) }}">{{ $instance->name }} ({{ $instance->id }})</option>
+            @endforeach
+        </select>
+        <label for="fleetFileName">File name</label>
+        <input id="fleetFileName" class="form-control" maxlength="64" placeholder="notes-example.txt">
+        <p id="fleetFileList" style="white-space:pre-wrap"></p>
+        <textarea id="fleetFileText" class="form-control" rows="10" spellcheck="false" aria-label="Text file contents"></textarea>
+        <label for="fleetFileUpload">Load local UTF-8 text into editor</label><input id="fleetFileUpload" type="file" accept=".txt,.yml,.yaml,text/plain">
+        <div style="margin:10px 0">
+            @foreach (['files'=>'List files','file_read'=>'Read','file_write'=>'Save existing','new'=>'Create notes file','file_delete'=>'Delete notes file','download'=>'Download editor text'] as $action => $label)
+                <button type="button" class="btn btn-default fleetFileAction" data-action="{{ $action }}">{{ $label }}</button>
+            @endforeach
+        </div>
+        <hr>
+        <h4>Server properties</h4>
+        <select id="fleetPropertyKey" class="form-control" aria-label="Property">
+            @foreach (['difficulty','gamemode','pvp','white-list','allow-flight','spawn-monsters','hardcore','max-players','view-distance','simulation-distance'] as $key)
+                <option value="{{ $key }}">{{ $key }}</option>
+            @endforeach
+        </select>
+        <input id="fleetPropertyValue" class="form-control" maxlength="32" placeholder="New value (e.g. true, hard, 40)" aria-label="Property value">
+        <button type="button" class="btn btn-primary fleetFileAction" data-action="property">Apply property</button>
+        <p id="fleetFileStatus" role="status"></p>
+    </div>
+</div>
+@endif
 @endsection
 
 @section('footer-scripts')
     @parent
     <script>
+        let loadedFile = null;
+        $('#fleetFileInstance, #fleetFileName').on('change input', function () { loadedFile = null; });
+        $('#fleetFileUpload').on('change', async function () {
+            const file = this.files[0];
+            if (!file) return;
+            if (file.size > 2048) { $('#fleetFileStatus').text('Maximum 2048 bytes.'); return; }
+            try {
+                $('#fleetFileText').val(new TextDecoder('utf-8', {fatal:true}).decode(await file.arrayBuffer()));
+                $('#fleetFileStatus').text('Local text loaded; not saved yet.');
+            } catch (_) { $('#fleetFileStatus').text('Invalid UTF-8 file.'); }
+        });
+        $('.fleetFileAction').on('click', function () {
+            const action = $(this).data('action');
+            const url = $('#fleetFileInstance').val();
+            const name = $('#fleetFileName').val();
+            const text = $('#fleetFileText').val();
+            const status = $('#fleetFileStatus');
+            if (action === 'download') {
+                const objectUrl = URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+                const link = document.createElement('a');
+                link.href = objectUrl; link.download = /^[A-Za-z0-9_.-]{1,64}$/.test(name) ? name : 'omcp-text.txt';
+                link.click(); setTimeout(() => URL.revokeObjectURL(objectUrl),1000); return;
+            }
+            const body = {action: action === 'new' ? 'file_write' : action};
+            if (['file_read','file_write','file_delete','new'].includes(action)) body.file = name;
+            if (action === 'file_write' || action === 'file_delete') {
+                if (!loadedFile || loadedFile.url !== url || loadedFile.name !== name) { status.text('Read the exact file first.'); return; }
+                body.expected = loadedFile.sha256;
+            }
+            if (action === 'new') body.expected = 'new';
+            if (action === 'file_write' || action === 'new') {
+                const bytes = new TextEncoder().encode(text);
+                if (bytes.length > 2048) { status.text('Maximum 2048 bytes.'); return; }
+                body.content_base64 = btoa(String.fromCharCode(...bytes));
+            }
+            if (action === 'file_delete' && !window.confirm('Delete this notes file?')) return;
+            if (action === 'property') { body.key = $('#fleetPropertyKey').val(); body.value = $('#fleetPropertyValue').val(); }
+            const controls = $('.fleetFileAction, #fleetFileInstance, #fleetFileName, #fleetFileText, #fleetFileUpload, #fleetPropertyKey, #fleetPropertyValue').prop('disabled',true);
+            status.text('Queueing...');
+            const finish = () => controls.prop('disabled',false);
+            $.ajax({method:'POST',url:url,data:body,dataType:'json',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}'}})
+                .done(function (data) {
+                    const resultUrl = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}'.replace('JOB_ID',encodeURIComponent(data.id));
+                    let attempts = 0;
+                    function pollFile() {
+                        $.getJSON(resultUrl).done(function (job) {
+                            status.text(job.state);
+                            if ((job.state === 'queued' || job.state === 'running') && ++attempts < 50) { setTimeout(pollFile,5000); return; }
+                            try {
+                                if (job.state === 'succeeded') {
+                                    const result = JSON.parse(job.result);
+                                    if (result.files) $('#fleetFileList').text(result.files.join('\n') + (result.limited ? '\n(List limited)' : ''));
+                                    if (action === 'file_read') {
+                                        const bytes = Uint8Array.from(atob(result.content_base64), c => c.charCodeAt(0));
+                                        $('#fleetFileText').val(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+                                        loadedFile = {url:url,name:name,sha256:result.sha256};
+                                    }
+                                    if (result.saved) loadedFile = {url:url,name:name,sha256:result.sha256};
+                                    if (result.deleted) { loadedFile = null; $('#fleetFileText').val(''); }
+                                } else if (job.result) status.text(job.state + ': ' + job.result);
+                            } catch (_) { status.text('Invalid job response.'); }
+                            finish();
+                        }).fail(function () { status.text('Result unavailable.'); finish(); });
+                    }
+                    pollFile();
+                }).fail(function (xhr) { status.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'File action failed.'); finish(); });
+        });
         $('.omcpInstanceAction').on('click', function () {
             const action = $(this).data('action');
             if (action === 'install' && !$('#fleetEula').prop('checked')) {
