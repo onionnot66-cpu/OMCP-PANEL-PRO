@@ -164,6 +164,7 @@ Route::group(['prefix' => 'nodes'], function () {
     Route::get('/view/{node:id}/omcp/status', [Admin\Nodes\OmcpConnectionController::class, 'status'])->name('admin.nodes.omcp.status');
     Route::post('/view/{node:id}/omcp/diagnostic', [Admin\Nodes\OmcpConnectionController::class, 'diagnostic'])->middleware('throttle:10,1')->name('admin.nodes.omcp.diagnostic');
     Route::get('/view/{node:id}/omcp/diagnostic/{job}', [Admin\Nodes\OmcpConnectionController::class, 'diagnosticResult'])->whereUuid('job')->name('admin.nodes.omcp.diagnostic.result');
+    Route::post('/view/{node:id}/omcp/install', [Admin\Nodes\OmcpConnectionController::class, 'install'])->middleware('throttle:5,1')->name('admin.nodes.omcp.install');
     Route::post('/view/{node:id}/omcp/power', [Admin\Nodes\OmcpConnectionController::class, 'power'])->middleware('throttle:10,1')->name('admin.nodes.omcp.power');
     Route::post('/view/{node:id}/omcp/enroll', [Admin\Nodes\OmcpConnectionController::class, 'enroll'])->middleware('throttle:10,1')->name('admin.nodes.omcp.enroll');
 
