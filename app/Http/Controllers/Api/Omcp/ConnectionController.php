@@ -37,7 +37,7 @@ class ConnectionController extends Controller
         $token = $this->token($request);
         $data = $request->validate([
             'node_id' => 'required|integer|min:1',
-            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input',
+            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision',
             'capabilities.os' => 'required|string|max:32',
             'capabilities.arch' => 'required|string|max:32',
             'capabilities.cpus' => 'required|integer|min:1|max:65536',
