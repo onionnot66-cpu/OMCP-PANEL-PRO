@@ -37,6 +37,8 @@
                 <p id="omcpStatus" role="status">Checking connection...</p>
                 <button type="button" class="btn btn-primary" id="omcpEnroll">Generate enrollment</button>
                 <button type="button" class="btn btn-default" id="omcpRotate">Revoke and re-enroll</button>
+                <button type="button" class="btn btn-default" id="omcpDiagnostic">Run diagnostic</button>
+                <pre id="omcpDiagnosticOutput" hidden></pre>
                 <div id="omcpInstructions" hidden>
                     <p>Run the command on your node and supply the token privately when prompted. Token expires after 15 minutes.</p>
                     <pre id="omcpCommand"></pre>
@@ -115,6 +117,29 @@
     $('#omcpReveal').on('click', function () {
         const token = $('#omcpToken');
         token.attr('type', token.attr('type') === 'password' ? 'text' : 'password');
+    });
+    let diagnosticTimer;
+    $('#omcpDiagnostic').on('click', function () {
+        clearTimeout(diagnosticTimer);
+        const button = $(this).prop('disabled', true);
+        const output = $('#omcpDiagnosticOutput').prop('hidden', false).text('Queueing diagnostic...');
+        $.ajax({
+            method: 'POST',
+            url: '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}',
+            headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'}
+        }).done(function (data) {
+            let attempts = 0;
+            const url = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}'.replace('JOB_ID', encodeURIComponent(data.id));
+            function poll() {
+                $.getJSON(url).done(function (job) {
+                    output.text(job.state + (job.result ? '\n' + job.result : ''));
+                    if ((job.state === 'queued' || job.state === 'running') && ++attempts < 70) {
+                        diagnosticTimer = setTimeout(poll, 5000);
+                    } else button.prop('disabled', false);
+                }).fail(function () { output.text('Unable to read diagnostic.'); button.prop('disabled', false); });
+            }
+            poll();
+        }).fail(function () { output.text('Unable to queue diagnostic.'); button.prop('disabled', false); });
     });
     refreshOmcp();
     setInterval(refreshOmcp, 30000);
