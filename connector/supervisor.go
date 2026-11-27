@@ -22,6 +22,7 @@ type supervisor struct {
  console consoleBuffer
  provision bool
  allowConsole bool
+ allowFiles bool
  cpu cpuSample
  container *containerRuntime
 }
