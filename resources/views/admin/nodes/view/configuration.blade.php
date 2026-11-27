@@ -29,6 +29,26 @@
     </div>
 </div>
 <div class="row">
+    <div class="col-xs-12">
+        <div class="box box-primary">
+            <div class="box-header with-border"><h3 class="box-title">OMCP Connect</h3></div>
+            <div class="box-body">
+                <p>Outbound connector enrollment for local or remote Linux nodes. No Wings or Docker needed for registration.</p>
+                <p id="omcpStatus" role="status">Checking connection...</p>
+                <button type="button" class="btn btn-primary" id="omcpEnroll">Generate enrollment</button>
+                <button type="button" class="btn btn-default" id="omcpRotate">Revoke and re-enroll</button>
+                <div id="omcpInstructions" hidden>
+                    <p>Run the command on your node and supply the token privately when prompted. Token expires after 15 minutes.</p>
+                    <pre id="omcpCommand"></pre>
+                    <input id="omcpToken" type="password" readonly class="form-control" autocomplete="off" aria-label="One-time enrollment token">
+                    <button type="button" class="btn btn-default" id="omcpReveal">Show / hide token</button>
+                </div>
+                <p class="text-warning">Experimental: enrollment and heartbeat only. Existing game management still requires the legacy daemon.</p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
     <div class="col-sm-8">
         <div class="box box-primary">
             <div class="box-header with-border">
@@ -64,6 +84,40 @@
 @section('footer-scripts')
     @parent
     <script>
+    const omcpStatus = $('#omcpStatus');
+    function refreshOmcp() {
+        $.getJSON('{{ route('admin.nodes.omcp.status', $node->id) }}').done(function (data) {
+            omcpStatus.text(data.online ? 'Online — last heartbeat: ' + data.last_seen_at :
+                (data.registered ? 'Offline' : 'Not registered'));
+        }).fail(function () { omcpStatus.text('Status unavailable'); });
+    }
+    function issueOmcp(rotate) {
+        $('#omcpInstructions').prop('hidden', true);
+        $('#omcpToken').val('').attr('type', 'password');
+        $.ajax({
+            method: 'POST',
+            url: '{{ route('admin.nodes.omcp.enroll', $node->id) }}',
+            headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'},
+            data: {rotate: rotate ? 1 : 0}
+        }).done(function (data) {
+            $('#omcpCommand').text(data.command);
+            $('#omcpToken').val(data.token);
+            $('#omcpInstructions').prop('hidden', false);
+            refreshOmcp();
+        }).fail(function (xhr) {
+            omcpStatus.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Enrollment failed.');
+        });
+    }
+    $('#omcpEnroll').on('click', function () { issueOmcp(false); });
+    $('#omcpRotate').on('click', function () {
+        if (window.confirm('Revoke the existing connector credential?')) issueOmcp(true);
+    });
+    $('#omcpReveal').on('click', function () {
+        const token = $('#omcpToken');
+        token.attr('type', token.attr('type') === 'password' ? 'text' : 'password');
+    });
+    refreshOmcp();
+    setInterval(refreshOmcp, 30000);
     $('#configTokenBtn').on('click', function (event) {
         $.ajax({
             method: 'POST',
