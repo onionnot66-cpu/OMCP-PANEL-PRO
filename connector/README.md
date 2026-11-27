@@ -18,4 +18,14 @@ Requires a trusted existing server.jar, Java and manual acceptance of the Minecr
 
 ## Limitations
 
-Registration and heartbeat are the only panel-integrated operations. Existing Wings paths remain active and must be replaced before game management without Wings works. Docker runtime, secure job delivery, resource enforcement, TLS deployment, full panel installer, routing, and marketplace remain outstanding. Do not deploy as a production game host yet.
+Registration, heartbeat, diagnostics and opt-in single-server admin power actions are panel-integrated. Existing Wings paths remain active and must be replaced before game management without Wings works. Docker runtime, secure job delivery, resource enforcement, TLS deployment, full panel installer, routing, and marketplace remain outstanding. Do not deploy as a production game host yet.
+
+## Remote native power experiment
+
+Use a dedicated, disposable non-root account and a trusted Minecraft server directory containing server.jar. Accept the EULA manually and configure the server port locally. After enrolling normally, stop the connector and restart it explicitly:
+
+```bash
+~/.local/bin/omcp-connect --trusted-native-dir /absolute/path/to/server --trusted-native-memory 1024
+```
+
+The node Configuration page can queue Start, Stop, Restart, Kill and Status operations for this one local server. There are no remote path or command arguments. A process running result does not guarantee Minecraft is accepting players. Graceful stop has a timeout and may force kill. Stopping the connector stops its supervised Java process. This feature shares an OS account with the connector: trusted jars/plugins only, never expose to ordinary hosting customers or treat it as isolated. Existing client server creation, console, multi-server management and tenant resource enforcement are not implemented by this experiment.
