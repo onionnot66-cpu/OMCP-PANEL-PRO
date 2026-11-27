@@ -90,3 +90,28 @@ CPU reports the Java process share of the total CPU time exposed by Linux /proc/
 Admin > Nodes > Configuration > Instance reservations records a UUID, owner, software/version, TCP port, RAM and disk budgets. Reservations are serialized per node, check the configured node budgets, and reject duplicate ports and existing legacy allocations. They are **not** running servers, do not install software and do not enforce kernel quotas. Releasing a reservation only deletes metadata. Nodes with reservations cannot be deleted until reservations are released; deleting an owner unassigns the reservation without deleting it.
 
 Use a separate dedicated node for these records. The legacy allocator and earlier single-server experiment are not coordinated with this registry; do not use them on the same node. The normal dashboard displays only the signed-in owner's reservation metadata, from GET /api/client/omcp/instances. It exposes no native power, files, logs or credentials. Do not grant users runtime access before independent process identities or container isolation and server-scoped job authorization are implemented.
+
+## Trusted multi-instance fleet experiment
+
+The registry now supports per-instance install and power jobs in a separate locally authorized fleet mode. Reserve the instances in the panel first. On the dedicated test account, create a private directory and a mode-0600 JSON manifest listing only the exact UUID, port and memory values from those reservations.
+
+Example manifest (replace the UUIDs with actual reserved instance IDs):
+
+```json
+[
+  {"id":"aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa","memory_mib":1024,"port":25565},
+  {"id":"bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb","memory_mib":1024,"port":25566}
+]
+```
+
+```bash
+mkdir -m 700 "$HOME/omcp-fleet"
+chmod 600 "$HOME/fleet.json"
+~/.local/bin/omcp-connect --trusted-fleet-root "$HOME/omcp-fleet" --trusted-fleet-manifest "$HOME/fleet.json" --trusted-fleet-memory 2048 --allow-native-provision
+```
+
+Admin > Nodes > Configuration > Instance reservations now offers per-instance installation (explicit EULA acceptance), Start, Stop, Restart, Kill, Status, Console and Metrics. Unknown IDs and mismatched local port/heap values are rejected. Each UUID has its own directory and Java process. The existing node job queue serializes operations, including downloads; running Java processes can coexist. Console and metrics are on-demand snapshots, not continuous fleet streaming.
+
+Fleet and single native modes are mutually exclusive. This is NOT a tenant sandbox: instances and connector share the same OS identity. The heap budget does not enforce physical memory, CPU or disk quotas. Do not install untrusted JARs/plugins or grant customers runtime access. The owner dashboard remains a read-only plan list. Once install/start/restart has been requested, the panel prevents releasing the allocation; a verified decommission workflow is still needed. There is no automatic delete, migration, or port reuse. Do not use the legacy Wings allocator on the fleet node.
+
+This section supersedes the metadata-only limitation for the admin fleet experiment described above. Full integration and build verification are still required before deployment.
