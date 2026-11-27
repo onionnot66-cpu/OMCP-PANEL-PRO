@@ -41,7 +41,7 @@
                 <div style="margin: 15px 0">
                     <strong>Trusted native Minecraft (experimental)</strong>
                     <p>Controls only the single server directory explicitly enabled on this connector. Never use for untrusted tenants.</p>
-                    @foreach (['start', 'stop', 'restart', 'kill', 'status'] as $action)
+                    @foreach (['start', 'stop', 'restart', 'kill', 'status', 'console'] as $action)
                         <button type="button" class="btn btn-default omcpPower" data-action="{{ $action }}">{{ ucfirst($action) }}</button>
                     @endforeach
                 </div>
@@ -52,7 +52,7 @@
                     <input id="omcpToken" type="password" readonly class="form-control" autocomplete="off" aria-label="One-time enrollment token">
                     <button type="button" class="btn btn-default" id="omcpReveal">Show / hide token</button>
                 </div>
-                <p class="text-warning">Experimental: enrollment, diagnostics and opt-in native power controls. Existing client game management still requires the legacy daemon.</p>
+                <p class="text-warning">Experimental: enrollment, diagnostics and opt-in native power controls. Console retrieves a recent output snapshot, not a live stream. Existing client game management still requires the legacy daemon.</p>
             </div>
         </div>
     </div>
