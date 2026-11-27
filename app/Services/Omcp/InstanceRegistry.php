@@ -49,12 +49,12 @@ class InstanceRegistry
         });
     }
 
-    public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs): string
+    public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = []): string
     {
-        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics'], true), 422);
+        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property'], true), 422);
         abort_if($action === 'install' && !$acceptEula, 422, 'Minecraft EULA acceptance required.');
 
-        return DB::transaction(function () use ($nodeId, $id, $action, $acceptEula, $jobs) {
+        return DB::transaction(function () use ($nodeId, $id, $action, $acceptEula, $jobs, $extra) {
             $node = Node::query()->lockForUpdate()->findOrFail($nodeId);
             abort_if($node->isUnderMaintenance() && in_array($action, ['install', 'start', 'restart'], true), 409, 'Node is in maintenance.');
             abort_if(DB::table('servers')->where('node_id', $nodeId)->exists(), 409, 'Use a dedicated OMCP node.');
@@ -68,8 +68,8 @@ class InstanceRegistry
                 'port' => (int) $instance->port,
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
-            ]);
-            if (in_array($action, ['install', 'start', 'restart'], true)) {
+            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value'])));
+            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property'], true)) {
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
             }
             return $job;
