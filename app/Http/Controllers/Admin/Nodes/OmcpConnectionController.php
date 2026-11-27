@@ -22,6 +22,22 @@ class OmcpConnectionController extends Controller
         ])->header('Cache-Control', 'no-store');
     }
 
+    public function diagnostic(Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
+    {
+        return response()->json(['id' => $jobs->enqueueDiagnostic($node->id)], 202)->header('Cache-Control', 'no-store');
+    }
+
+    public function diagnosticResult(Node $node, string $job): JsonResponse
+    {
+        $record = DB::table('omcp_jobs')->where('node_id', $node->id)->where('id', $job)->first();
+        abort_unless($record, 404);
+        $state = $record->state;
+        if (in_array($state, ['queued', 'running'], true) && \Illuminate\Support\Carbon::parse($record->expires_at)->lte(now())) {
+            $state = 'expired';
+        }
+        return response()->json(['state' => $state, 'result' => $record->result])->header('Cache-Control', 'no-store');
+    }
+
     public function enroll(Request $request, Node $node, EnrollmentService $service): JsonResponse
     {
         $data = $request->validate(['rotate' => 'sometimes|boolean']);
