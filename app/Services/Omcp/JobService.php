@@ -18,6 +18,12 @@ class JobService
         return DB::transaction(function () use ($node, $action) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
+            if ($action !== 'diagnostic') {
+                abort_unless($connection->last_seen_at && \Illuminate\Support\Carbon::parse($connection->last_seen_at)->gt(now()->subSeconds(90)), 409, 'Connector offline.');
+                $busy = DB::table('omcp_jobs')->where('node_id', $node)->where('action', 'like', 'native.%')
+                    ->whereIn('state', ['queued', 'running'])->where('expires_at', '>', now())->exists();
+                abort_if($busy, 409, 'A native action is already pending.');
+            }
             $pending = DB::table('omcp_jobs')->where('node_id', $node)
                 ->whereIn('state', ['queued', 'running'])->where('expires_at', '>', now())->count();
             abort_if($pending >= 10, 429, 'Too many pending jobs.');
@@ -27,7 +33,7 @@ class JobService
                 'node_id' => $node,
                 'action' => $action,
                 'state' => 'queued',
-                'expires_at' => now()->addMinutes(5),
+                'expires_at' => $action === 'diagnostic' ? now()->addMinutes(5) : now()->addSeconds(90),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
