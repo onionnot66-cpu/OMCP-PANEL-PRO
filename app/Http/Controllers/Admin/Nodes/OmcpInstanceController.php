@@ -29,6 +29,27 @@ class OmcpInstanceController extends Controller
         return response()->json(['id' => $id], 202)->header('Cache-Control', 'no-store');
     }
 
+    public function files(Request $request, Node $node, string $instance, InstanceRegistry $registry, \Pterodactyl\Services\Omcp\JobService $jobs)
+    {
+        $data = $request->validate([
+            'action' => 'required|in:files,file_read,file_write,file_delete,property',
+            'file' => ['required_if:action,file_read,file_write,file_delete', 'nullable', 'string', 'max:64', 'regex:/\A(?:bukkit\.yml|spigot\.yml|commands\.yml|paper\.yml|notes-[A-Za-z0-9_-]{1,48}\.txt)\z/'],
+            'content_base64' => 'nullable|string|max:2732',
+            'expected' => ['required_if:action,file_write,file_delete', 'nullable', 'regex:/\A(?:new|[a-f0-9]{64})\z/'],
+            'key' => 'required_if:action,property|nullable|in:difficulty,gamemode,pvp,white-list,allow-flight,spawn-monsters,hardcore,max-players,view-distance,simulation-distance',
+            'value' => 'required_if:action,property|nullable|string|max:32',
+        ]);
+        if ($data['action'] === 'file_write') {
+            $data['content_base64'] = $data['content_base64'] ?? '';
+            $decoded = base64_decode($data['content_base64'], true);
+            abort_if($decoded === false || strlen($decoded) > 2048 || !mb_check_encoding($decoded, 'UTF-8'), 422, 'Only UTF-8 text up to 2048 bytes is supported.');
+        }
+        // Avoid null values for the connector's typed string fields.
+        $extra = array_filter($data, static fn ($v) => $v !== null);
+        $id = $registry->dispatch($node->id, $instance, $data['action'], false, $jobs, $extra);
+        return response()->json(['id' => $id], 202)->header('Cache-Control', 'no-store');
+    }
+
     public function destroy(Node $node, string $instance, InstanceRegistry $registry)
     {
         $registry->release($node->id, $instance);
