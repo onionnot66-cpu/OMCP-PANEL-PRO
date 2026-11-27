@@ -21,6 +21,8 @@ type supervisor struct {
  done chan error
  console consoleBuffer
  provision bool
+ allowConsole bool
+ cpu cpuSample
 }
 
 func newSupervisor(dir string,memory int)(*supervisor,error){return openSupervisor(dir,memory,false)}
@@ -71,6 +73,7 @@ func(s *supervisor) start()error{
  cmd.Env=[]string{"PATH=/usr/local/bin:/usr/bin:/bin","HOME="+s.dir,"LANG=C.UTF-8"}
  cmd.SysProcAttr=&syscall.SysProcAttr{Pdeathsig:syscall.SIGKILL}
  s.console.reset()
+ s.cpu=cpuSample{}
  cmd.Stdout=io.MultiWriter(os.Stdout,&s.console)
  cmd.Stderr=io.MultiWriter(os.Stderr,&s.console)
  input,err:=cmd.StdinPipe()
