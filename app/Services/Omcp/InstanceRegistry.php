@@ -49,11 +49,41 @@ class InstanceRegistry
         });
     }
 
+    public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs): string
+    {
+        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics'], true), 422);
+        abort_if($action === 'install' && !$acceptEula, 422, 'Minecraft EULA acceptance required.');
+
+        return DB::transaction(function () use ($nodeId, $id, $action, $acceptEula, $jobs) {
+            $node = Node::query()->lockForUpdate()->findOrFail($nodeId);
+            abort_if($node->isUnderMaintenance() && in_array($action, ['install', 'start', 'restart'], true), 409, 'Node is in maintenance.');
+            abort_if(DB::table('servers')->where('node_id', $nodeId)->exists(), 409, 'Use a dedicated OMCP node.');
+            $instance = DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->lockForUpdate()->first();
+            abort_unless($instance, 404);
+            abort_if(DB::table('allocations')->where('node_id', $nodeId)->where('port', $instance->port)->exists(), 409, 'Legacy allocation conflicts with instance port.');
+            $job = $jobs->enqueue($nodeId, 'instance.' . $action, [
+                'instance_id' => $instance->id,
+                'software' => $instance->software,
+                'version' => $instance->version,
+                'port' => (int) $instance->port,
+                'memory_mib' => (int) $instance->memory_mib,
+                'accept_eula' => $acceptEula,
+            ]);
+            if (in_array($action, ['install', 'start', 'restart'], true)) {
+                DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
+            }
+            return $job;
+        });
+    }
+
     public function release(int $nodeId, string $id): void
     {
         DB::transaction(function () use ($nodeId, $id) {
             Node::query()->lockForUpdate()->findOrFail($nodeId);
-            abort_unless(DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->delete() === 1, 404);
+            $row = DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->lockForUpdate()->first();
+            abort_unless($row, 404);
+            abort_if($row->runtime_requested_at, 409, 'Runtime was requested. Manual decommission is required before release.');
+            DB::table('omcp_instances')->where('id', $id)->delete();
         });
     }
 
