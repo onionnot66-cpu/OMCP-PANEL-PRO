@@ -120,7 +120,10 @@ func run() error {
  defer signal.Stop(stop)
  for {
   var out struct { OK bool `json:"ok"` }
-  err := call(c,"heartbeat",c.Credential,map[string]any{"node_id":c.Node,"capabilities":capabilities()},&out)
+  caps:=capabilities()
+  caps["native_enabled"]=native!=nil
+  caps["native_provision"]=native!=nil && native.provision
+  err := call(c,"heartbeat",c.Credential,map[string]any{"node_id":c.Node,"capabilities":caps},&out)
   if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
    fmt.Println("Heartbeat accepted")
    if err:=pollJob(c,native);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
