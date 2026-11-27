@@ -87,7 +87,9 @@ func run() error {
  fleetBudget:=flag.Int("trusted-fleet-memory",0,"total permitted Java heap MiB")
  fleetImage:=flag.String("fleet-podman-image","","optional approved local rootless Podman image ID (sha256:...)")
  fleetCPUs:=flag.Int("fleet-podman-cpus",2,"container CPU limit per instance")
+ allowFiles:=flag.Bool("allow-fleet-files",false,"enable bounded offline admin text file operations")
  flag.Parse()
+ if *allowFiles && *fleetRoot==""{return errors.New("file manager requires trusted fleet mode")}
  if *fleetImage!="" && *fleetRoot==""{return errors.New("Podman requires trusted fleet mode")}
  if (*fleetRoot=="")!=(*fleetManifest=="") || (*fleetRoot!="" && *trustedDir!=""){return errors.New("choose single native mode or a complete fleet configuration")}
  if *allowConsole && *trustedDir=="" && *fleetRoot==""{return errors.New("console requires --trusted-native-dir")}
@@ -130,6 +132,7 @@ func run() error {
   multi,err=openFleet(*fleetRoot,*fleetManifest,*fleetBudget,*provision,*allowConsole)
   if err!=nil{return err}
   defer multi.close()
+  for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   if *fleetImage!=""{if err=multi.enableContainers(*fleetImage,*fleetCPUs,*fleetBudget);err!=nil{return err}}
  }
  stop := make(chan os.Signal,1)
@@ -138,6 +141,7 @@ func run() error {
  for {
   var out struct { OK bool `json:"ok"` }
   caps:=capabilities()
+  caps["fleet_files"]=multi!=nil && *allowFiles
   caps["fleet_enabled"]=multi!=nil
   caps["fleet_provision"]=multi!=nil && *provision
   caps["native_enabled"]=native!=nil
