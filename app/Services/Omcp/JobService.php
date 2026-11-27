@@ -9,7 +9,13 @@ class JobService
 {
     public function enqueueDiagnostic(int $node): string
     {
-        return DB::transaction(function () use ($node) {
+        return $this->enqueue($node, 'diagnostic');
+    }
+
+    public function enqueue(int $node, string $action): string
+    {
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status'], true), 422, 'Unsupported action.');
+        return DB::transaction(function () use ($node, $action) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
             $pending = DB::table('omcp_jobs')->where('node_id', $node)
@@ -19,7 +25,7 @@ class JobService
             DB::table('omcp_jobs')->insert([
                 'id' => $id,
                 'node_id' => $node,
-                'action' => 'diagnostic',
+                'action' => $action,
                 'state' => 'queued',
                 'expires_at' => now()->addMinutes(5),
                 'created_at' => now(),
