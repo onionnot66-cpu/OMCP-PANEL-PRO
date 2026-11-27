@@ -80,7 +80,9 @@ func run() error {
  enroll := flag.Bool("enroll",false,"enroll a new connector; read token from stdin")
  trustedDir := flag.String("trusted-native-dir", "", "opt-in local trusted Minecraft directory; never use for untrusted tenants")
  trustedMemory := flag.Int("trusted-native-memory", 1024, "Java heap MiB, not a hard limit")
+ provision := flag.Bool("allow-native-provision", false, "allow admin to create only the configured new trusted directory")
  flag.Parse()
+ if *provision && *trustedDir=="" {return errors.New("provision requires --trusted-native-dir")}
  var c config
  if *enroll {
   c = config{Panel:strings.TrimRight(*panel,"/"),Node:*node}
@@ -109,7 +111,7 @@ func run() error {
  if len(c.Credential)!=64 { return errors.New("invalid stored credential") }
  var native *supervisor
  if *trustedDir!="" {
-  native,err=newSupervisor(*trustedDir,*trustedMemory)
+  native,err=openSupervisor(*trustedDir,*trustedMemory,*provision)
   if err!=nil{return err}
   defer native.close()
  }
