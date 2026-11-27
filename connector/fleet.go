@@ -8,6 +8,8 @@ import (
  "path/filepath"
  "regexp"
  "syscall"
+ "strings"
+ "strconv"
 )
 
 var instanceIDPattern=regexp.MustCompile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -84,4 +86,17 @@ func(f *fleet) execute(j job)(bool,string){
 func(f *fleet) close(){
  for _,s:=range f.servers{if err:=s.stop(false);err!=nil{fmt.Fprintln(os.Stderr,"instance stop:",err)}}
  _=f.lock.Close()
+}
+
+func matchesFleetPort(data string,port int)bool{
+ found:=false
+ for _,line:=range strings.Split(strings.ReplaceAll(data,"\r\n","\n"),"\n"){
+  t:=strings.TrimSpace(line)
+  if t==""||strings.HasPrefix(t,"#")||strings.HasPrefix(t,"!"){continue}
+  if (len(line)-len(strings.TrimRight(line,"\\")))%2!=0{return false}
+  k,v,ok:=strings.Cut(t,"=")
+  if !ok||k==""||strings.ContainsAny(k,"\\: \t\r\n"){return false}
+  if k=="server-port"{if found||v!=strconv.Itoa(port){return false};found=true}
+ }
+ return found
 }
