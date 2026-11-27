@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>{{ config('app.name', 'Pterodactyl') }}</title>
+        <title>{{ config('app.name', 'OMCP') }}</title>
 
         @section('meta')
             <meta charset="utf-8">
@@ -16,7 +16,8 @@
             <link rel="mask-icon" href="/favicons/safari-pinned-tab.svg" color="#bc6e3c">
             <link rel="shortcut icon" href="/favicons/favicon.ico">
             <meta name="msapplication-config" content="/favicons/browserconfig.xml">
-            <meta name="theme-color" content="#0e4688">
+            <meta name="theme-color" content="#171329">
+            <link rel="icon" type="image/svg+xml" href="/assets/svgs/omcp.svg">
         @show
 
         @section('user-data')
