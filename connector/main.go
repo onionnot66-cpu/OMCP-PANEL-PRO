@@ -82,9 +82,13 @@ func run() error {
  trustedMemory := flag.Int("trusted-native-memory", 1024, "Java heap MiB, not a hard limit")
  provision := flag.Bool("allow-native-provision", false, "allow admin to create only the configured new trusted directory")
  allowConsole := flag.Bool("allow-native-console",false,"enable restricted Minecraft console commands from admin")
+ fleetRoot:=flag.String("trusted-fleet-root","","private directory for locally authorized instances")
+ fleetManifest:=flag.String("trusted-fleet-manifest","","private JSON allowlist of instance IDs, ports and heap budgets")
+ fleetBudget:=flag.Int("trusted-fleet-memory",0,"total permitted Java heap MiB")
  flag.Parse()
- if *allowConsole && *trustedDir==""{return errors.New("console requires --trusted-native-dir")}
- if *provision && *trustedDir=="" {return errors.New("provision requires --trusted-native-dir")}
+ if (*fleetRoot=="")!=(*fleetManifest=="") || (*fleetRoot!="" && *trustedDir!=""){return errors.New("choose single native mode or a complete fleet configuration")}
+ if *allowConsole && *trustedDir=="" && *fleetRoot==""{return errors.New("console requires --trusted-native-dir")}
+ if *provision && *trustedDir=="" && *fleetRoot=="" {return errors.New("provision requires --trusted-native-dir")}
  var c config
  if *enroll {
   c = config{Panel:strings.TrimRight(*panel,"/"),Node:*node}
@@ -118,12 +122,20 @@ func run() error {
   native.allowConsole=*allowConsole
   defer native.close()
  }
+ var multi *fleet
+ if *fleetRoot!=""{
+  multi,err=openFleet(*fleetRoot,*fleetManifest,*fleetBudget,*provision,*allowConsole)
+  if err!=nil{return err}
+  defer multi.close()
+ }
  stop := make(chan os.Signal,1)
  signal.Notify(stop,os.Interrupt,syscall.SIGTERM)
  defer signal.Stop(stop)
  for {
   var out struct { OK bool `json:"ok"` }
   caps:=capabilities()
+  caps["fleet_enabled"]=multi!=nil
+  caps["fleet_provision"]=multi!=nil && *provision
   caps["native_enabled"]=native!=nil
   caps["native_provision"]=native!=nil && native.provision
   caps["native_console_input"]=native!=nil && native.allowConsole
@@ -132,7 +144,7 @@ func run() error {
   err := call(c,"heartbeat",c.Credential,payload,&out)
   if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
    fmt.Println("Heartbeat accepted")
-   if err:=pollJob(c,native);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
+   if err:=pollJob(c,native,multi);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
   }
   select { case <-stop: return nil; case <-time.After(5*time.Second): }
  }
