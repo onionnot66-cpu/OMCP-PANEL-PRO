@@ -163,6 +163,7 @@ Route::group(['prefix' => 'nodes'], function () {
     Route::post('/view/{node:id}/allocation/alias', [Admin\NodesController::class, 'allocationSetAlias'])->name('admin.nodes.view.allocation.setAlias');
     Route::get('/view/{node:id}/omcp/instances', [Admin\Nodes\OmcpInstanceController::class, 'index'])->name('admin.nodes.omcp.instances');
     Route::post('/view/{node:id}/omcp/instances', [Admin\Nodes\OmcpInstanceController::class, 'store'])->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.store');
+    Route::post('/view/{node:id}/omcp/instances/{instance}/files', [Admin\Nodes\OmcpInstanceController::class, 'files'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.files');
     Route::post('/view/{node:id}/omcp/instances/{instance}/action', [Admin\Nodes\OmcpInstanceController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.action');
     Route::delete('/view/{node:id}/omcp/instances/{instance}', [Admin\Nodes\OmcpInstanceController::class, 'destroy'])->whereUuid('instance')->name('admin.nodes.omcp.instances.destroy');
     Route::get('/view/{node:id}/omcp/status', [Admin\Nodes\OmcpConnectionController::class, 'status'])->name('admin.nodes.omcp.status');
