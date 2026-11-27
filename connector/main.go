@@ -78,6 +78,8 @@ func run() error {
  panel := flag.String("panel","","HTTPS panel origin")
  node := flag.Int("node",0,"node ID")
  enroll := flag.Bool("enroll",false,"enroll a new connector; read token from stdin")
+ trustedDir := flag.String("trusted-native-dir", "", "opt-in local trusted Minecraft directory; never use for untrusted tenants")
+ trustedMemory := flag.Int("trusted-native-memory", 1024, "Java heap MiB, not a hard limit")
  flag.Parse()
  var c config
  if *enroll {
@@ -105,6 +107,12 @@ func run() error {
  }
  if err := validate(c); err != nil { return err }
  if len(c.Credential)!=64 { return errors.New("invalid stored credential") }
+ var native *supervisor
+ if *trustedDir!="" {
+  native,err=newSupervisor(*trustedDir,*trustedMemory)
+  if err!=nil{return err}
+  defer native.close()
+ }
  stop := make(chan os.Signal,1)
  signal.Notify(stop,os.Interrupt,syscall.SIGTERM)
  defer signal.Stop(stop)
@@ -113,7 +121,7 @@ func run() error {
   err := call(c,"heartbeat",c.Credential,map[string]any{"node_id":c.Node,"capabilities":capabilities()},&out)
   if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
    fmt.Println("Heartbeat accepted")
-   if err:=pollJob(c);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
+   if err:=pollJob(c,native);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
   }
   select { case <-stop: return nil; case <-time.After(30*time.Second): }
  }
