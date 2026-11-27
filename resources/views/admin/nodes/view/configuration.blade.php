@@ -38,6 +38,13 @@
                 <button type="button" class="btn btn-primary" id="omcpEnroll">Generate enrollment</button>
                 <button type="button" class="btn btn-default" id="omcpRotate">Revoke and re-enroll</button>
                 <button type="button" class="btn btn-default" id="omcpDiagnostic">Run diagnostic</button>
+                <div style="margin: 15px 0">
+                    <strong>Trusted native Minecraft (experimental)</strong>
+                    <p>Controls only the single server directory explicitly enabled on this connector. Never use for untrusted tenants.</p>
+                    @foreach (['start', 'stop', 'restart', 'kill', 'status'] as $action)
+                        <button type="button" class="btn btn-default omcpPower" data-action="{{ $action }}">{{ ucfirst($action) }}</button>
+                    @endforeach
+                </div>
                 <pre id="omcpDiagnosticOutput" hidden></pre>
                 <div id="omcpInstructions" hidden>
                     <p>Run the command on your node and supply the token privately when prompted. Token expires after 15 minutes.</p>
@@ -45,7 +52,7 @@
                     <input id="omcpToken" type="password" readonly class="form-control" autocomplete="off" aria-label="One-time enrollment token">
                     <button type="button" class="btn btn-default" id="omcpReveal">Show / hide token</button>
                 </div>
-                <p class="text-warning">Experimental: enrollment and heartbeat only. Existing game management still requires the legacy daemon.</p>
+                <p class="text-warning">Experimental: enrollment, diagnostics and opt-in native power controls. Existing client game management still requires the legacy daemon.</p>
             </div>
         </div>
     </div>
@@ -119,13 +126,16 @@
         token.attr('type', token.attr('type') === 'password' ? 'text' : 'password');
     });
     let diagnosticTimer;
-    $('#omcpDiagnostic').on('click', function () {
+    $('#omcpDiagnostic, .omcpPower').on('click', function () {
+        const action = $(this).data('action');
+        if (action === 'kill' && !window.confirm('Force stop the trusted Minecraft process? Unsaved changes may be lost.')) return;
         clearTimeout(diagnosticTimer);
-        const button = $(this).prop('disabled', true);
-        const output = $('#omcpDiagnosticOutput').prop('hidden', false).text('Queueing diagnostic...');
+        const button = $('#omcpDiagnostic, .omcpPower').prop('disabled', true);
+        const output = $('#omcpDiagnosticOutput').prop('hidden', false).text('Queueing ' + (action || 'diagnostic') + '...');
         $.ajax({
             method: 'POST',
-            url: '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}',
+            url: action ? '{{ route('admin.nodes.omcp.power', $node->id) }}' : '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}',
+            data: action ? {action: action} : {},
             headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'}
         }).done(function (data) {
             let attempts = 0;
