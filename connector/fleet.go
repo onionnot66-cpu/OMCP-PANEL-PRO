@@ -69,6 +69,7 @@ func(f *fleet) execute(j job)(bool,string){
  if err!=nil&&!os.IsNotExist(err){return false,"instance directory unavailable"}
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}
  switch j.Action{
+ case "instance.files","instance.file_read","instance.file_write","instance.file_delete","instance.property":return s.fileJob(j)
  case "instance.install","instance.start","instance.stop","instance.restart","instance.kill","instance.status","instance.console","instance.metrics":
   if j.Action=="instance.start"||j.Action=="instance.restart"{
    // Require the reserved port in canonical setup output, not an arbitrary edited config.
