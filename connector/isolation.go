@@ -45,7 +45,7 @@ func(r *containerRuntime) args(dir string,heap int)[]string{
   "--tmpfs","/tmp:rw,nosuid,nodev,size=256m","--pids-limit=512",
   "--memory",strconv.Itoa(r.memory)+"m","--memory-swap",strconv.Itoa(r.memory)+"m",
   "--cpus",strconv.Itoa(r.cpus),"--network=bridge",
-  "--publish",fmt.Sprintf("%d:25565/tcp",r.port),
+  "--publish",fmt.Sprintf("%d:%d/tcp",r.port,r.port),
   "--volume",dir+":/server:rw,Z","--workdir","/server",
   "--env","HOME=/server","--entrypoint","java",r.image,
   fmt.Sprintf("-Xmx%dM",heap),"-jar","server.jar","nogui"}
