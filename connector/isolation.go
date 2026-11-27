@@ -60,3 +60,12 @@ func(r *containerRuntime) kill()error{
  if errors.As(err,&status)&&status.ExitCode()==1{return nil}
  return errors.New("container termination not confirmed; inspect locally")
 }
+
+func(r *containerRuntime) requireAbsent()error{
+ ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second);defer cancel()
+ err:=exec.CommandContext(ctx,r.binary,"container","exists",r.name).Run()
+ var status *exec.ExitError
+ if errors.As(err,&status)&&status.ExitCode()==1{return nil}
+ if err==nil{return errors.New("container name already exists; reconcile locally before retry")}
+ return errors.New("container state could not be verified")
+}
