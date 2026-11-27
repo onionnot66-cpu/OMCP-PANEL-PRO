@@ -29,7 +29,7 @@ class OmcpConnectionController extends Controller
 
     public function power(Request $request, Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
     {
-        $data = $request->validate(['action' => 'required|in:start,stop,restart,kill,status']);
+        $data = $request->validate(['action' => 'required|in:start,stop,restart,kill,status,console']);
         abort_if($node->isUnderMaintenance() && in_array($data['action'], ['start', 'restart'], true), 409, 'Node is in maintenance.');
         return response()->json(['id' => $jobs->enqueue($node->id, 'native.' . $data['action'])], 202)
             ->header('Cache-Control', 'no-store');
