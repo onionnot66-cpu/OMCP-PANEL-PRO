@@ -129,3 +129,11 @@ Use the exact local image ID obtained from Podman after independently verifying 
 The feature refuses missing rootless/cgroup-v2 prerequisites and never falls back to native execution. If an attachment exits and a named container remains, reconcile it locally before retrying; no automatic removal of existing containers. Connector termination is not a guarantee that all containers exit. Container telemetry currently reports configured limits and attachment status, not Java RSS or CPU measurements.
 
 This is additional isolation, not a verified hostile-tenant sandbox. Rootless keep-id uses the connector user's mapped identity, outbound networking is not restricted, there is no disk quota, and the host-side file APIs are not audited for malicious symlink races. Continue using only trusted workloads and admin-only actions. Full runtime tests on a real Podman host and security review are required before customer access.
+
+## Offline admin File Manager
+
+Add --allow-fleet-files to an explicitly configured trusted fleet connector. Stop the chosen instance first (including any remaining Podman container). In Admin > Nodes > Configuration > Instance reservations, select the instance in Offline File Manager.
+
+The initial file API lists a bounded set of root-level configuration files and notes-*.txt. It supports UTF-8 text up to 2048 bytes, reading, loading local text into the editor, saving with an expected SHA-256, creating and deleting notes files, and downloading editor text. It refuses path traversal, symlinks, hardlinks and non-regular files. Raw server.properties access is intentionally blocked; the separate properties editor changes only approved keys. The underlying properties file must be small and use canonical Java Properties syntax. Existing configuration edits use atomic replacement.
+
+No recursive browsing, arbitrary uploads, JAR files, archives, world transfers or file access for customers. File payloads/results are stored in the panel job database and base64 is not encryption. Never put credentials or other secrets in managed files. Only use trusted offline workloads, without concurrent local modifications; these checks are not a sandbox against a malicious same-UID process. No automatic decommission or disk-quota enforcement. Runtime and panel integration require further testing.
