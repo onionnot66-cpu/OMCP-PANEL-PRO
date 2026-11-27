@@ -34,7 +34,7 @@ class OmcpConnectionController extends Controller
         return response()->json([
             'token' => $token,
             'expires_in' => 900,
-            'command' => 'curl --proto =https -fL --retry 3 https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/168ced5d9f40944aa1ca77768d9e258268d6b732/omcp-connect-install.sh -o omcp-connect-install.sh && bash omcp-connect-install.sh --panel ' . escapeshellarg($origin) . ' --node ' . $node->id,
+            'command' => 'curl --proto =https -fL --retry 3 https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/acd8bff62f1476e7a01d93e184d172025ccead3e/omcp-connect-install.sh -o omcp-connect-install.sh && bash omcp-connect-install.sh --panel ' . escapeshellarg($origin) . ' --node ' . $node->id,
         ])->header('Cache-Control', 'no-store');
     }
 }
