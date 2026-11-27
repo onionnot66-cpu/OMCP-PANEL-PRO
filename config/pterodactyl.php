@@ -187,7 +187,7 @@ return [
     */
 
     'telemetry' => [
-        'enabled' => env('PTERODACTYL_TELEMETRY_ENABLED', true),
+        'enabled' => env('PTERODACTYL_TELEMETRY_ENABLED', false),
     ],
 
     'features' => [
