@@ -1,7 +1,11 @@
 package main
 
 import (
+ "context"
  "encoding/json"
+ "os/exec"
+ "time"
+ "strings"
  "fmt"
 )
 
@@ -14,7 +18,16 @@ type job struct {
 func executeJob(j job) (bool,string) {
  switch j.Action {
  case "diagnostic":
-  result,err:=json.Marshal(capabilities())
+  report:=capabilities()
+  if java,err:=exec.LookPath("java");err==nil {
+   ctx,cancel:=context.WithTimeout(context.Background(),5*time.Second)
+   defer cancel()
+   cmd:=exec.CommandContext(ctx,java,"-version")
+   var output consoleBuffer
+   cmd.Stdout=&output;cmd.Stderr=&output
+   if cmd.Run()==nil {report["java_version"]=strings.ToValidUTF8(output.snapshot(),"")} else {report["java_version"]="unavailable"}
+  }
+  result,err:=json.Marshal(report)
   if err!=nil { return false,"diagnostic serialization failed" }
   return true,string(result)
  default:
