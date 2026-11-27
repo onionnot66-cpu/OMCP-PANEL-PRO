@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 # Development installer; compiles a pinned revision without sudo.
-revision=32f0ed969ba7a423d2b1fa92a0999497decff612
+revision=f95c839010165c8a8ed46b823b390e267bdfb6bc
 base="https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/$revision/connector"
 if [[ "$(uname -s)" != Linux ]]; then echo "Linux required." >&2; exit 1; fi
 for cmd in go curl mktemp install; do
@@ -20,7 +20,7 @@ dest="$HOME/.local/bin/omcp-connect"
 if [[ -e "$HOME/.omcp-connect/config.json" ]]; then echo "Connector configuration exists. Back up and revoke old credentials before re-enrollment." >&2; exit 1; fi
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
-for file in go.mod main.go native.go main_test.go jobs.go jobs_test.go supervisor.go setup.go console.go console_test.go download.go download_test.go properties.go properties_test.go provision.go provision_test.go; do
+for file in go.mod main.go native.go main_test.go jobs.go jobs_test.go supervisor.go setup.go console.go console_test.go download.go download_test.go properties.go properties_test.go provision.go provision_test.go telemetry.go telemetry_test.go; do
   curl --proto '=https' --proto-redir '=https' -fLsS --retry 3 "$base/$file" -o "$tmp/$file"
 done
 (
