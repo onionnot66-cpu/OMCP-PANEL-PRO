@@ -115,3 +115,17 @@ Admin > Nodes > Configuration > Instance reservations now offers per-instance in
 Fleet and single native modes are mutually exclusive. This is NOT a tenant sandbox: instances and connector share the same OS identity. The heap budget does not enforce physical memory, CPU or disk quotas. Do not install untrusted JARs/plugins or grant customers runtime access. The owner dashboard remains a read-only plan list. Once install/start/restart has been requested, the panel prevents releasing the allocation; a verified decommission workflow is still needed. There is no automatic delete, migration, or port reuse. Do not use the legacy Wings allocator on the fleet node.
 
 This section supersedes the metadata-only limitation for the admin fleet experiment described above. Full integration and build verification are still required before deployment.
+
+## Optional rootless Podman fleet backend (experimental)
+
+On a dedicated Linux test account with functional rootless Podman, cgroup v2, delegated resource controllers, and an approved local Java runtime image, add the following flags to the trusted fleet command:
+
+```bash
+--fleet-podman-image sha256:YOUR_LOCAL_IMAGE_ID --fleet-podman-cpus 2
+```
+
+Use the exact local image ID obtained from Podman after independently verifying the image source and Java version. No image is pulled automatically. Host Java is still required by the existing downloader. The aggregate fleet memory flag must include 512 MiB extra per instance (for example, two 1024 MiB heaps require at least 3072 MiB budget). Each container requests a RAM limit of heap + 512 MiB, RAM-plus-swap limit of heap + 640 MiB, CPU and PID limits; verify that your host actually enforces them. Only the corresponding instance directory is explicitly bind-mounted; the container root filesystem is read-only, Linux capabilities are dropped, privilege escalation and automatic proxy-environment injection are disabled. The selected game TCP port is published on the host. Configure a firewall as needed.
+
+The feature refuses missing rootless/cgroup-v2 prerequisites and never falls back to native execution. If an attachment exits and a named container remains, reconcile it locally before retrying; no automatic removal of existing containers. Connector termination is not a guarantee that all containers exit. Container telemetry currently reports configured limits and attachment status, not Java RSS or CPU measurements.
+
+This is additional isolation, not a verified hostile-tenant sandbox. Rootless keep-id uses the connector user's mapped identity, outbound networking is not restricted, there is no disk quota, and the host-side file APIs are not audited for malicious symlink races. Continue using only trusted workloads and admin-only actions. Full runtime tests on a real Podman host and security review are required before customer access.
