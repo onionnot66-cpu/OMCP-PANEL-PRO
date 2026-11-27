@@ -18,6 +18,11 @@ type jobPayload struct {
  Command string `json:"command"`
  InstanceID string `json:"instance_id"`
  Memory int `json:"memory_mib"`
+ File string `json:"file"`
+ Content string `json:"content_base64"`
+ Expected string `json:"expected"`
+ Key string `json:"key"`
+ Value string `json:"value"`
 }
 
 func(s *supervisor) executeJob(j job)(bool,string){
