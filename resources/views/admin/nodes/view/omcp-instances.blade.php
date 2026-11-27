@@ -16,9 +16,11 @@
 
 @section('content')
 <div class="callout callout-warning">
-    <h4>Experimental reservation registry</h4>
-    <p>Reservations do not create or start Minecraft processes. Use a dedicated OMCP node; do not mix this registry with Wings or the single-server test runtime. Resource budgets are accounting values, not operating-system limits.</p>
+    <h4>Experimental trusted instance management</h4>
+    <p>Reserve an instance, then authorize its UUID, port and memory in the local connector fleet manifest before installing or starting it. Use a dedicated OMCP node; do not mix this registry with Wings or the single-server test runtime. Resource budgets are accounting values, not operating-system limits.</p>
 </div>
+<div class="checkbox"><label><input type="checkbox" id="fleetEula"> I have read and accept the <a href="https://www.minecraft.net/eula" target="_blank" rel="noopener noreferrer">Minecraft EULA</a> for installations.</label></div>
+<pre id="fleetOutput" role="status" style="white-space:pre-wrap;max-height:350px;overflow:auto">No runtime job selected.</pre>
 <div class="row">
     <div class="col-md-6">
         <div class="box box-primary">
@@ -61,8 +63,17 @@
                                 <td>{{ $instance->owner_id ?? 'Unassigned' }}</td>
                                 <td>{{ ucfirst($instance->software) }} {{ $instance->version }}</td>
                                 <td>{{ $instance->port }}</td><td>{{ $instance->memory_mib }} MiB</td><td>{{ $instance->disk_mib }} MiB</td>
-                                <td>Reserved only</td>
-                                <td><form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release this reservation? No game files will be deleted.');">@csrf @method('DELETE')<button class="btn btn-danger btn-xs" type="submit">Release</button></form></td>
+                                <td>{{ $instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved' }}</td>
+                                <td>
+                                    <div class="btn-group" style="margin-bottom:6px">
+                                        @foreach (['install','start','stop','restart','kill','status','console','metrics'] as $action)
+                                            <button type="button" class="btn btn-default btn-xs omcpInstanceAction" data-action="{{ $action }}" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ ucfirst($action) }}</button>
+                                        @endforeach
+                                    </div>
+                                    @if (!$instance->runtime_requested_at)
+                                    <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release this reservation? No game files will be deleted.');">@csrf @method('DELETE')<button class="btn btn-danger btn-xs" type="submit">Release</button></form>
+                                    @endif
+                                </td>
                             </tr>
                         @empty
                             <tr><td colspan="8">No reservations yet.</td></tr>
@@ -73,4 +84,33 @@
         </div>
     </div>
 </div>
+@endsection
+
+@section('footer-scripts')
+    @parent
+    <script>
+        $('.omcpInstanceAction').on('click', function () {
+            const action = $(this).data('action');
+            if (action === 'install' && !$('#fleetEula').prop('checked')) {
+                $('#fleetOutput').text('Read and accept the EULA first.');
+                return;
+            }
+            if (action === 'kill' && !window.confirm('Force stop? Unsaved changes may be lost.')) return;
+            const controls = $('.omcpInstanceAction').prop('disabled', true);
+            const output = $('#fleetOutput').text('Queueing ' + action + '...');
+            $.ajax({method:'POST',url:$(this).data('url'),data:{action:action,accept_eula:$('#fleetEula').prop('checked') ? 1 : 0},dataType:'json',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}'}})
+                .done(function (data) {
+                    const url = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}'.replace('JOB_ID', encodeURIComponent(data.id));
+                    let attempts = 0;
+                    function poll() {
+                        $.getJSON(url).done(function (job) {
+                            output.text(job.state + (job.result ? '\n' + job.result : ''));
+                            if ((job.state === 'queued' || job.state === 'running') && ++attempts < 270) setTimeout(poll,5000);
+                            else controls.prop('disabled',false);
+                        }).fail(function () { output.text('Job result unavailable.'); controls.prop('disabled',false); });
+                    }
+                    poll();
+                }).fail(function (xhr) { output.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Action failed.'); controls.prop('disabled',false); });
+        });
+    </script>
 @endsection
