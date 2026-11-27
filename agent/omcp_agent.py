@@ -5,6 +5,17 @@ try:
 except ImportError:
     paramiko=None
 from pathlib import Path
+import hmac
+
+def valid_totp(secret, code):
+    if not re.fullmatch(r"[0-9]{6}", str(code)): return False
+    counter = int(time.time()) // 30
+    for step in (counter-1, counter, counter+1):
+        digest = hmac.digest(base64.b32decode(secret), struct.pack(">Q", step), "sha1")
+        offset = digest[-1] & 15
+        value = int.from_bytes(digest[offset:offset+4],"big") & 0x7fffffff
+        if hmac.compare_digest(f"{value%1000000:06}", str(code)): return True
+    return False
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, quote, urlencode
 
@@ -1742,7 +1753,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.username is None: return False
         if load_users().get(self.username,{}).get('role')=='admin': return True
         path=urlparse(self.path).path
-        if path in ('/api/me','/api/account/update','/api/panel/config'): return True
+        if path in ('/api/me','/api/account/update','/api/account/totp','/api/panel/config'): return True
         if path=='/api/servers': return self.command=='GET'
         backup_match=re.match(r'^/api/backups/([a-f0-9]{8})-',path)
         if backup_match: return server_permission(self.username,backup_match.group(1),'backups')
@@ -1982,6 +1993,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not record.get("password") or not password_ok(password,record):
                         return send(self,401,{"field":"password","error":"Incorrect password."})
                     username=canonical
+                    if record.get("totp") and not valid_totp(record["totp"],d.get("code","")):
+                        return send(self,401,{"error":"Enter the current six-digit authenticator code."})
                 return send(self,200,{"token":new_session(username),"user":{"username":username,"email":users[username].get("email",""),"role":users[username]["role"]}})
             except Exception as e: return send(self,400,{"error":str(e)})
         if path=="/api/logout":
@@ -1990,6 +2003,29 @@ class Handler(BaseHTTPRequestHandler):
                 with SESSION_LOCK: SESSIONS.pop(header[7:],None)
             return send(self,200,{"ok":True})
         if not self.auth(): return send(self,401,{"error":"Login required"})
+        if path=="/api/account/totp":
+            try:
+                d=body(self)
+                with SESSION_LOCK:
+                    users=load_users(); user=users[self.username]
+                    if not password_ok(str(d.get("password","")),user): raise ValueError("Current password required")
+                    action=d.get("action")
+                    if action=="disable":
+                        if not user.get("totp") or not valid_totp(user["totp"],d.get("code","")): raise ValueError("Current authenticator code required")
+                        user.pop("totp")
+                    elif user.get("totp"): raise ValueError("Two-factor authentication already enabled")
+                    elif action=="begin":
+                        secret=base64.b32encode(secrets.token_bytes(20)).decode()
+                        user["pendingTotp"]=[secret,time.time()+300]; save_users(users)
+                        return send(self,200,{"secret":secret})
+                    elif action=="enable":
+                        secret,expires=user.get("pendingTotp",["",0])
+                        if expires<time.time() or not valid_totp(secret,d.get("code","")): raise ValueError("Expired setup or incorrect code")
+                        user["totp"]=secret
+                    else: raise ValueError("Invalid action")
+                    user.pop("pendingTotp",None); save_users(users)
+                return send(self,200,{"enabled":bool(user.get("totp"))})
+            except (ValueError,KeyError) as e: return send(self,400,{"error":str(e)})
         if path=="/api/account/update":
             try:
                 d=body(self); old_username=self.username; username=str(d.get("username","")).strip(); email=str(d.get("email","")).strip().lower(); current_password=str(d.get("currentPassword","")); new_password=str(d.get("newPassword",""))

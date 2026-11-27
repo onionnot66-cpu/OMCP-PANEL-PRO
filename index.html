@@ -181,7 +181,7 @@
         padding: 20px;
       }
     }
-  </style>
+  .card{background:rgb(25 31 41 / var(--opacity,1))}aside{background:rgb(23 28 36 / var(--opacity,1))}[hidden]{display:none!important}</style>
   <aside>
     <strong>OMCP</strong>
     <p class="muted">SERVER CONTROL</p>
@@ -267,11 +267,13 @@
       return `<label>${esc(label)}<input name="${name}" type="${type}" value="${esc(value)}" required></label>`;
     }
     async function auth() {
+      applyAppearance({});
       const s = await api("/api/setup/status");
       screen(
         s.setupRequired ? "Create administrator" : "Sign in",
         `<div class="auth card"><h2>${s.setupRequired ? "Welcome to OMCP" : "Welcome back"}</h2><p class="muted">Your servers. Your control.</p><form>${field("username", "Username")}${s.setupRequired ? field("email", "Email", "email") : ""}${field("password", "Password", "password")}<button type="submit" class="primary">Continue →</button></form></div>`,
       );
+      if (!s.setupRequired) content.querySelector("form button").insertAdjacentHTML("beforebegin",'<label>Authenticator code (if enabled)<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}"></label>');
       form([], async (d) => {
         const r = await api(
           s.setupRequired ? "/api/setup" : "/api/login",
@@ -287,7 +289,7 @@
       const d = await api("/api/servers");
       screen(
         "Your servers",
-        `<div class="row"><p class="muted">Manage your Minecraft infrastructure.</p>${me.role === "admin" ? '<button id="create" class="primary">+ Create server</button>' : ""}</div><div class="grid">${d.servers.map((s) => `<article class="card"><small>${esc(s.software)} / ${esc(s.version)}</small><h2>${esc(s.name)}</h2><p>${esc(s.status)} · ${esc(s.memory)} GB RAM</p><p class="muted">${esc(s.address || "Address not configured")}</p><button data-server="${s.id}">Open workspace →</button></article>`).join("") || "<p>No servers yet.</p>"}</div>`,
+        `<div class="row"><p class="muted">Manage your Minecraft infrastructure.</p></div><div class="grid">${d.servers.map((s) => `<article class="card"><small>${esc(s.software)} / ${esc(s.version)}</small><h2>${esc(s.name)}</h2><p>${esc(s.status)} · ${esc(s.memory)} GB RAM</p><p class="muted">${esc(s.address || "Address not configured")}</p><button data-server="${s.id}">Open workspace →</button></article>`).join("") || "<p>No servers yet.</p>"}</div>`,
       );
       content.querySelectorAll("[data-server]").forEach(
         (b) =>
@@ -296,9 +298,10 @@
             workspace().catch(error);
           }),
       );
-      if ($("create")) $("create").onclick = () => create().catch(error);
+      
     }
     async function create() {
+      if (me?.role !== "admin") return;
       const users = (await api("/api/users")).users;
       screen(
         "Create server",
@@ -562,6 +565,14 @@
         "Administration",
         `<div class="grid"><div class="card"><h2>${u.users.length}</h2>Users</div><div class="card"><h2>${s.servers.length}</h2>Servers</div><div class="card"><h2>${m.nodes.length}</h2>Nodes</div></div><h2 style="margin-top:30px">Users</h2><div class="card"><table><tr><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr>${u.users.map((x) => `<tr><td>${esc(x.username)}</td><td>${esc(x.email)}</td><td>${esc(x.role)}</td><td><button data-edit-user="${esc(x.username)}">Edit</button> <button class="danger" data-delete-user="${esc(x.username)}">Delete</button></td></tr>`).join("")}</table><button id="addUser">+ Create user</button></div><h2 style="margin-top:30px">Nodes</h2><div class="grid">${m.nodes.map((n) => `<div class="card"><h2>${esc(n.name)}</h2><p>${esc(n.address)}</p><p>${n.id === "local" ? "Local execution available" : "Connector not connected"}</p></div>`).join("")}</div><h2 style="margin-top:30px">Activity</h2><div class="card"><table><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr>${audit.events.map((e) => `<tr><td>${new Date(e.time * 1000).toLocaleString()}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td><td>${esc(e.target)}</td></tr>`).join("")}</table></div>`,
       );
+      content.insertAdjacentHTML("afterbegin", '<section class="card"><h2>Servers</h2><button id="create">Create server</button><div id="inventory"></div></section>');
+      $("create").onclick = () => create().catch(error);
+      for (const server of s.servers) {
+        const button = document.createElement("button");
+        button.textContent = server.name;
+        button.onclick = () => { selected = server; workspace().catch(error); };
+        $("inventory").append(button);
+      }
       $("addUser").onclick = () => {
         screen(
           "Create user",
@@ -582,6 +593,25 @@
         try { await api("/api/users/" + encodeURIComponent(button.dataset.deleteUser), "DELETE", {}); await admin(); } catch (e) { error(e); }
       });
     }
+    function preferences() {
+      try { return JSON.parse(localStorage.getItem("omcp:appearance:"+me.username)) || {}; } catch { return {}; }
+    }
+    function applyAppearance(p) {
+      const url = p.image ? new URL(p.image) : null;
+      if (url && url.protocol !== "https:") throw Error("Use an HTTPS image URL");
+      document.body.style.backgroundImage = url ? "url("+JSON.stringify(url.href)+")" : "";
+      document.body.style.backgroundSize = "cover";
+      document.body.style.backgroundAttachment = "fixed";
+      document.documentElement.style.setProperty("--opacity", Math.min(100, Math.max(20, Number(p.opacity)||100))/100);
+    }
+    function account() {
+      const p = preferences();
+      screen("Account settings", '<section class="card"><h2>Appearance</h2><form><label>Background image URL<input type="url" name="image" value="'+esc(p.image||"")+'"></label><label>Panel opacity<input type="range" min="20" max="100" name="opacity" value="'+esc(p.opacity||100)+'"></label><button type="submit">Save appearance</button></form></section><section class="card"><h2>Profile</h2><form id="profile">'+field("email","Email","email",me.email)+field("currentPassword","Current password","password")+'<label>New password (optional)<input name="newPassword" type="password"></label><button>Save profile</button></form></section>');
+      content.insertAdjacentHTML("beforeend",'<section class="card"><h2>Two-factor authentication</h2><form id="factor"><label>Current password<input required name="password" type="password"></label><label>Authenticator code<input name="code" inputmode="numeric"></label><button value="begin">Get setup key</button> <button value="enable">Enable</button> <button value="disable">Disable</button></form><p id="factorStatus"></p></section>');
+      $("factor").onsubmit=async e=>{e.preventDefault();try{const r=await api("/api/account/totp","POST",{...Object.fromEntries(new FormData(e.target)),action:e.submitter.value});$("factorStatus").textContent=r.secret?"Add this key to your authenticator, then enter its code within five minutes: "+r.secret:r.enabled?"Two-factor authentication enabled":"Two-factor authentication disabled";if(!r.secret)e.target.reset()}catch(err){error(err)}};
+      form([], async data => { applyAppearance(data); localStorage.setItem("omcp:appearance:"+me.username, JSON.stringify(data)); $("notice").textContent="Appearance saved on this browser"; });
+      $("profile").onsubmit=async event=>{event.preventDefault();try{const result=await api("/api/account/update","POST",{username:me.username,...Object.fromEntries(new FormData(event.target))});me=result.user;account();$("notice").textContent="Profile saved";}catch(e){error(e)}};
+    }
     async function boot() {
       if (!token) return auth();
       try {
@@ -590,6 +620,11 @@
         token = null;
         sessionStorage.removeItem("omcp-token");
         return auth();
+      }
+      applyAppearance(preferences());
+      if (!$("accountSettings")) {
+        const button=document.createElement("button"); button.id="accountSettings"; button.textContent="Account settings"; button.onclick=account;
+        $("signout").before(button);
       }
       $("identity").textContent = me.username;
       $("administration").hidden = me.role !== "admin";
