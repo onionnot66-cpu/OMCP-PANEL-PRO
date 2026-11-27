@@ -162,6 +162,8 @@ Route::group(['prefix' => 'nodes'], function () {
     Route::post('/view/{node:id}/allocation/remove', [Admin\NodesController::class, 'allocationRemoveBlock'])->name('admin.nodes.view.allocation.removeBlock');
     Route::post('/view/{node:id}/allocation/alias', [Admin\NodesController::class, 'allocationSetAlias'])->name('admin.nodes.view.allocation.setAlias');
     Route::get('/view/{node:id}/omcp/status', [Admin\Nodes\OmcpConnectionController::class, 'status'])->name('admin.nodes.omcp.status');
+    Route::post('/view/{node:id}/omcp/diagnostic', [Admin\Nodes\OmcpConnectionController::class, 'diagnostic'])->middleware('throttle:10,1')->name('admin.nodes.omcp.diagnostic');
+    Route::get('/view/{node:id}/omcp/diagnostic/{job}', [Admin\Nodes\OmcpConnectionController::class, 'diagnosticResult'])->whereUuid('job')->name('admin.nodes.omcp.diagnostic.result');
     Route::post('/view/{node:id}/omcp/enroll', [Admin\Nodes\OmcpConnectionController::class, 'enroll'])->middleware('throttle:10,1')->name('admin.nodes.omcp.enroll');
 
     Route::post('/view/{node:id}/settings/token', Admin\NodeAutoDeployController::class)->name('admin.nodes.view.configuration.token');
