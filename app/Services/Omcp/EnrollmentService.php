@@ -27,6 +27,9 @@ class EnrollmentService
             ];
             if ($existing) {
                 DB::table('omcp_connections')->where('node_id', $id)->update($values);
+                DB::table('omcp_jobs')->where('node_id', $id)->whereIn('state', ['queued', 'running'])->update([
+                    'state' => 'expired', 'lease_hash' => null, 'updated_at' => now(),
+                ]);
             } else {
                 DB::table('omcp_connections')->insert($values + ['node_id' => $id, 'created_at' => now()]);
             }
