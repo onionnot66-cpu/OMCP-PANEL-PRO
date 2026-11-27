@@ -14,7 +14,7 @@ class JobService
 
     public function enqueue(int $node, string $action): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
