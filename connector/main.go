@@ -128,6 +128,10 @@ func run() error {
 }
 
 func main() {
+ if len(os.Args)>1 && os.Args[1]=="properties" {
+  if err:=editProperties(os.Args[2:]);err!=nil{fmt.Fprintln(os.Stderr,err);os.Exit(1)}
+  return
+ }
  if len(os.Args)>1 && os.Args[1]=="download" {
   if err:=downloadMinecraft(os.Args[2:]);err!=nil{fmt.Fprintln(os.Stderr,err);os.Exit(1)}
   return
