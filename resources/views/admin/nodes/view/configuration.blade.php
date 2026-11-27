@@ -46,6 +46,17 @@
                     @endforeach
                 </div>
                 <div class="well">
+                    <h4>Native console &amp; resource monitor</h4>
+                    <p id="omcpNativeMetrics">Waiting for native telemetry...</p>
+                    <pre id="omcpLiveConsole" style="background:#171329;color:#e9e5ff;white-space:pre-wrap;overflow:auto;height:220px" aria-label="Recent Minecraft console">Waiting for connector...</pre>
+                    <label for="omcpConsoleCommand">Minecraft command (restricted)</label>
+                    <div class="input-group">
+                        <input id="omcpConsoleCommand" maxlength="256" class="form-control" placeholder="list, save-all, say Hello" autocomplete="off">
+                        <span class="input-group-btn"><button type="button" id="omcpSendCommand" class="btn btn-primary omcpPower" data-action="command" disabled>Send</button></span>
+                    </div>
+                    <p class="help-block">Requires local console opt-in. Output refreshes approximately every five seconds; this is not a WebSocket stream.</p>
+                </div>
+                <div class="well">
                     <h4>Create a trusted Minecraft test server</h4>
                     <p>Requires connector started with explicit local provisioning enabled and an unused directory. Existing worlds are never overwritten.</p>
                     <div class="row">
@@ -63,7 +74,7 @@
                     <input id="omcpToken" type="password" readonly class="form-control" autocomplete="off" aria-label="One-time enrollment token">
                     <button type="button" class="btn btn-default" id="omcpReveal">Show / hide token</button>
                 </div>
-                <p class="text-warning">Experimental: enrollment, diagnostics and opt-in native power controls. Console retrieves a recent output snapshot, not a live stream. Existing client game management still requires the legacy daemon.</p>
+                <p class="text-warning">Experimental: enrollment, diagnostics and opt-in native power controls. Console refreshes a bounded output snapshot, not a full log stream. Existing client game management still requires the legacy daemon.</p>
             </div>
         </div>
     </div>
@@ -105,11 +116,39 @@
     @parent
     <script>
     const omcpStatus = $('#omcpStatus');
+    let consoleAllowed = false;
+    let jobPending = false;
     function refreshOmcp() {
         $.getJSON('{{ route('admin.nodes.omcp.status', $node->id) }}').done(function (data) {
             omcpStatus.text(data.online ? 'Online — last heartbeat: ' + data.last_seen_at :
                 (data.registered ? 'Offline' : 'Not registered'));
-        }).fail(function () { omcpStatus.text('Status unavailable'); });
+            consoleAllowed = !!(data.online && data.capabilities && data.capabilities.native_console_input);
+            $('#omcpSendCommand').prop('disabled', jobPending || !consoleAllowed);
+            const telemetry = data.telemetry;
+            const view = $('#omcpLiveConsole');
+            if (!telemetry) {
+                view.text('No recent native telemetry.');
+                $('#omcpNativeMetrics').text('Metrics unavailable.');
+                return;
+            }
+            const element = view[0];
+            const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 30;
+            if (view.text() !== telemetry.console) {
+                view.text(telemetry.console);
+                if (nearBottom) element.scrollTop = element.scrollHeight;
+            }
+            const m = telemetry.metrics || {};
+            const mib = n => typeof n === 'number' ? (n / 1048576).toFixed(1) + ' MiB' : 'N/A';
+            const cpu = typeof m.cpu_host_percent === 'number' ? m.cpu_host_percent.toFixed(2) + '%' : 'N/A';
+            $('#omcpNativeMetrics').text((m.process_running ? 'Running' : 'Stopped') +
+                ' | CPU (host share): ' + cpu + ' | Java RSS: ' + mib(m.java_rss_bytes) +
+                ' | Heap limit: ' + m.java_heap_limit_mib + ' MiB | Filesystem free: ' + mib(m.filesystem_available_bytes));
+        }).fail(function () {
+            omcpStatus.text('Status unavailable');
+            consoleAllowed = false;
+            $('#omcpSendCommand').prop('disabled', true);
+            $('#omcpNativeMetrics').text('Unable to refresh telemetry; displayed console may be stale.');
+        });
     }
     function issueOmcp(rotate) {
         $('#omcpInstructions').prop('hidden', true);
@@ -139,21 +178,26 @@
     let diagnosticTimer;
     $('#omcpDiagnostic, .omcpPower').on('click', function () {
         const action = $(this).data('action');
+        const command = $('#omcpConsoleCommand').val();
+        if (jobPending || (action === 'command' && (!consoleAllowed || !command.trim()))) return;
         if (action === 'kill' && !window.confirm('Force stop the trusted Minecraft process? Unsaved changes may be lost.')) return;
         if (action === 'install' && !$('#omcpEula').prop('checked')) {
             $('#omcpDiagnosticOutput').prop('hidden', false).text('Read and accept the Minecraft EULA first.');
             return;
         }
         clearTimeout(diagnosticTimer);
+        jobPending = true;
         const button = $('#omcpDiagnostic, .omcpPower').prop('disabled', true);
+        function release() { jobPending = false; button.prop('disabled', false); $('#omcpSendCommand').prop('disabled', !consoleAllowed); }
         const output = $('#omcpDiagnosticOutput').prop('hidden', false).text('Queueing ' + (action || 'diagnostic') + '...');
         $.ajax({
             method: 'POST',
-            url: action === 'install' ? '{{ route('admin.nodes.omcp.install', $node->id) }}' : (action ? '{{ route('admin.nodes.omcp.power', $node->id) }}' : '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}'),
-            data: action === 'install' ? {software: $('#omcpSoftware').val(), version: $('#omcpVersion').val(), port: $('#omcpPort').val(), accept_eula: 1} : (action ? {action: action} : {}),
+            url: action === 'command' ? '{{ route('admin.nodes.omcp.command', $node->id) }}' : action === 'install' ? '{{ route('admin.nodes.omcp.install', $node->id) }}' : (action ? '{{ route('admin.nodes.omcp.power', $node->id) }}' : '{{ route('admin.nodes.omcp.diagnostic', $node->id) }}'),
+            data: action === 'command' ? {command: command} : action === 'install' ? {software: $('#omcpSoftware').val(), version: $('#omcpVersion').val(), port: $('#omcpPort').val(), accept_eula: 1} : (action ? {action: action} : {}),
             dataType: 'json',
             headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'}
         }).done(function (data) {
+            if (action === 'command') $('#omcpConsoleCommand').val('');
             let attempts = 0;
             const url = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}'.replace('JOB_ID', encodeURIComponent(data.id));
             function poll() {
@@ -161,14 +205,14 @@
                     output.text(job.state + (job.result ? '\n' + job.result : ''));
                     if ((job.state === 'queued' || job.state === 'running') && ++attempts < (action === 'install' ? 270 : 70)) {
                         diagnosticTimer = setTimeout(poll, 5000);
-                    } else button.prop('disabled', false);
-                }).fail(function () { output.text('Unable to read diagnostic.'); button.prop('disabled', false); });
+                    } else release();
+                }).fail(function () { output.text('Unable to read diagnostic.'); release(); });
             }
             poll();
-        }).fail(function (xhr) { output.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to queue action.'); button.prop('disabled', false); });
+        }).fail(function (xhr) { output.text(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'Unable to queue action.'); release(); });
     });
     refreshOmcp();
-    setInterval(refreshOmcp, 30000);
+    setInterval(refreshOmcp, 5000);
     $('#configTokenBtn').on('click', function (event) {
         $.ajax({
             method: 'POST',
