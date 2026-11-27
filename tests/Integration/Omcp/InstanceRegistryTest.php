@@ -48,6 +48,33 @@ class InstanceRegistryTest extends IntegrationTestCase
         $this->assertDatabaseMissing('omcp_instances', ['id' => $id]);
     }
 
+    public function testFleetJobsUseStoredInstanceAllocationAndPreventPrematureRelease(): void
+    {
+        $node = $this->node();
+        $owner = User::factory()->create();
+        $registry = app(InstanceRegistry::class);
+        $jobs = app(\Pterodactyl\Services\Omcp\JobService::class);
+        $id = $registry->reserve($node->id, $this->input($owner));
+        DB::table('omcp_connections')->where('node_id', $node->id)->update([
+            'last_seen_at' => now(),
+            'capabilities' => json_encode(['fleet_enabled' => true, 'fleet_provision' => true]),
+        ]);
+
+        $job = $registry->dispatch($node->id, $id, 'install', true, $jobs);
+        $record = DB::table('omcp_jobs')->where('id', $job)->first();
+        $this->assertSame('instance.install', $record->action);
+        $this->assertSame($node->id, (int) $record->node_id);
+        $payload = json_decode($record->payload, true);
+        $this->assertSame($id, $payload['instance_id']);
+        $this->assertSame(25565, $payload['port']);
+        $this->assertSame(1024, $payload['memory_mib']);
+        $this->assertTrue($payload['accept_eula']);
+
+        $this->expectException(HttpException::class);
+        $this->expectExceptionMessage('Runtime was requested. Manual decommission is required before release.');
+        $registry->release($node->id, $id);
+    }
+
     public function testDuplicatePortsAndCapacityOvercommitAreRejected(): void
     {
         $node = $this->node();
