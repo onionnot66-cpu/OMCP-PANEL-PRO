@@ -17,6 +17,7 @@ class OmcpConnectionController extends Controller
         return response()->json([
             'registered' => (bool) ($record->credential_hash ?? false),
             'online' => isset($record->last_seen_at) && \Illuminate\Support\Carbon::parse($record->last_seen_at)->gt(now()->subSeconds(90)),
+            'telemetry' => isset($record->telemetry) && isset($record->last_seen_at) && \Illuminate\Support\Carbon::parse($record->last_seen_at)->gt(now()->subSeconds(90)) ? json_decode($record->telemetry, true) : null,
             'last_seen_at' => $record->last_seen_at ?? null,
             'capabilities' => isset($record->capabilities) ? json_decode($record->capabilities, true) : null,
         ])->header('Cache-Control', 'no-store');
@@ -33,6 +34,15 @@ class OmcpConnectionController extends Controller
         abort_if($node->isUnderMaintenance() && in_array($data['action'], ['start', 'restart'], true), 409, 'Node is in maintenance.');
         return response()->json(['id' => $jobs->enqueue($node->id, 'native.' . $data['action'])], 202)
             ->header('Cache-Control', 'no-store');
+    }
+
+    public function command(Request $request, Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
+    {
+        abort_if($node->isUnderMaintenance(), 409, 'Node is in maintenance.');
+        $data = $request->validate(['command' => ['required', 'string', 'max:256', 'regex:/\A[^\x00-\x1f\x7f]+\z/']]);
+        $command = $data['command'];
+        abort_unless(in_array($command, ['list', 'save-all', 'save-all flush', 'whitelist list', 'time query daytime', 'time query gametime'], true) || (str_starts_with($command, 'say ') && trim(substr($command, 4)) !== ''), 422, 'Unsupported Minecraft command.');
+        return response()->json(['id' => $jobs->enqueue($node->id, 'native.command', ['command' => $command])], 202)->header('Cache-Control', 'no-store');
     }
 
     public function install(Request $request, Node $node, \Pterodactyl\Services\Omcp\JobService $jobs): JsonResponse
