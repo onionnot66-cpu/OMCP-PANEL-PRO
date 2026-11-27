@@ -1,0 +1,97 @@
+name: OMCP panel smoke tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'bootstrap/**'
+      - 'config/**'
+      - 'database/**'
+      - 'routes/**'
+      - 'resources/**'
+      - 'public/**'
+      - 'tests/**'
+      - 'composer.*'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'omcp-ui-test-install.sh'
+      - '.github/workflows/omcp-panel-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  panel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: omcp_ci_only
+          MYSQL_DATABASE: omcp_test_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      APP_ENV: testing
+      APP_NAME: OMCP
+      APP_ENVIRONMENT_ONLY: 'true'
+      APP_URL: http://127.0.0.1:8080
+      APP_DEBUG: 'false'
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_DATABASE: omcp_test_ci
+      DB_USERNAME: root
+      DB_PASSWORD: omcp_ci_only
+      CACHE_DRIVER: array
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      PTERODACTYL_TELEMETRY_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_mysql, posix, zip, bcmath, curl, dom, xml
+          coverage: none
+          tools: composer:v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP dependencies
+        run: |
+          cp .env.example .env
+          composer install --no-interaction --prefer-dist --no-scripts
+          php artisan package:discover --ansi
+          php artisan key:generate --force
+          echo "APP_KEY=$(sed -n 's/^APP_KEY=//p' .env)" >> "$GITHUB_ENV"
+      - name: Connector integration tests
+        run: vendor/bin/phpunit tests/Integration/Omcp/ConnectorProtocolTest.php
+      - name: Frontend build
+        run: |
+          npm install --global yarn@1.22.22
+          yarn install --frozen-lockfile --non-interactive
+          NODE_OPTIONS=--max-old-space-size=4096 yarn build:production
+          test -s public/assets/manifest.json
+      - name: Install and route smoke checks
+        run: |
+          bash -n omcp-ui-test-install.sh
+          php artisan migrate --force
+          php artisan route:list --path=api/omcp/v1
+          php artisan serve --host=127.0.0.1 --port=8080 > /tmp/omcp-http.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          curl --retry 10 --retry-connrefused --retry-delay 2 --fail --silent --show-error http://127.0.0.1:8080/auth/login -o /tmp/omcp-login.html
+          grep -q 'OMCP' /tmp/omcp-login.html
+      - name: Upload build assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: omcp-panel-assets
+          path: public/assets/
