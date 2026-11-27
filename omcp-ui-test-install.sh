@@ -4,7 +4,7 @@ umask 077
 
 # Fresh, private development UI installation only. Never use production data.
 # No root, Docker, Wings, systemd or public web listener is required.
-revision=312e6b798f21f7e3e63fdbd72bb8f3f8db4741cf
+revision=11901ee3c355e9bf7de12bc0ed41eab1d8b5f3ab
 repo=https://github.com/onionnot66-cpu/OMCP-PANEL-PRO.git
 dest="$HOME/omcp-ui-test"
 if [[ "$EUID" -eq 0 ]]; then echo 'Use a non-root Linux account.' >&2; exit 1; fi
