@@ -1,0 +1,34 @@
+name: OMCP Connect checks
+on:
+  push:
+    paths:
+      - 'connector/**'
+      - 'omcp-connect-install.sh'
+      - '.github/workflows/omcp-connect.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connector:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: connector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: bash -n ../omcp-connect-install.sh
+      - run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/omcp-connect-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/omcp-connect-linux-arm64 .
+          (cd dist && sha256sum omcp-connect-linux-* > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omcp-connect-linux
+          path: connector/dist/
