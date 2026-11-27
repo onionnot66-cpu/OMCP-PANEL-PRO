@@ -1,0 +1,40 @@
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin\Nodes;
+
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Pterodactyl\Models\Node;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Services\Omcp\EnrollmentService;
+
+class OmcpConnectionController extends Controller
+{
+    public function status(Node $node): JsonResponse
+    {
+        $record = DB::table('omcp_connections')->where('node_id', $node->id)->first();
+        return response()->json([
+            'registered' => (bool) ($record->credential_hash ?? false),
+            'online' => isset($record->last_seen_at) && \Illuminate\Support\Carbon::parse($record->last_seen_at)->gt(now()->subSeconds(90)),
+            'last_seen_at' => $record->last_seen_at ?? null,
+            'capabilities' => isset($record->capabilities) ? json_decode($record->capabilities, true) : null,
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    public function enroll(Request $request, Node $node, EnrollmentService $service): JsonResponse
+    {
+        $data = $request->validate(['rotate' => 'sometimes|boolean']);
+        $origin = rtrim((string) config('app.url'), '/');
+        $url = parse_url($origin);
+        abort_unless(is_array($url) && ($url['scheme'] ?? '') === 'https' && !empty($url['host']) && !isset($url['user'], $url['pass']) && empty($url['path']) && empty($url['query']) && empty($url['fragment']), 422, 'Configure an HTTPS panel origin first.');
+        $token = $service->issue($node->id, (bool) ($data['rotate'] ?? false));
+        abort_unless($token !== null, 409, 'Enrollment exists. Explicitly rotate to revoke it.');
+
+        return response()->json([
+            'token' => $token,
+            'expires_in' => 900,
+            'command' => 'bash omcp-connect-install.sh --panel ' . escapeshellarg($origin) . ' --node ' . $node->id,
+        ])->header('Cache-Control', 'no-store');
+    }
+}
