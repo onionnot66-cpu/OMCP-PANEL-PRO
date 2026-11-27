@@ -20,17 +20,27 @@ type supervisor struct {
  input io.WriteCloser
  done chan error
  console consoleBuffer
+ provision bool
 }
 
-func newSupervisor(dir string,memory int)(*supervisor,error){
+func newSupervisor(dir string,memory int)(*supervisor,error){return openSupervisor(dir,memory,false)}
+
+func openSupervisor(dir string,memory int,provision bool)(*supervisor,error){
  if os.Geteuid()==0 {return nil,errors.New("trusted runtime requires a non-root account")}
  if memory<128 || memory>1048576 {return nil,errors.New("invalid Java heap")}
  resolved,err:=filepath.EvalSymlinks(dir)
+ if err!=nil && provision && os.IsNotExist(err){
+  abs,e:=filepath.Abs(dir);if e!=nil{return nil,e}
+  parent,e:=filepath.EvalSymlinks(filepath.Dir(abs));if e!=nil{return nil,e}
+  resolved=filepath.Join(parent,filepath.Base(abs));err=nil
+  if _,e=os.Lstat(resolved);!os.IsNotExist(e){return nil,errors.New("provision target must not be a symlink or existing object")}
+ }
  if err!=nil{return nil,err}
  resolved,err=filepath.Abs(resolved)
  if err!=nil{return nil,err}
  info,err:=os.Stat(resolved)
- if err!=nil || !info.IsDir(){return nil,errors.New("trusted server directory missing")}
+ if err!=nil && !(provision && os.IsNotExist(err)){return nil,err}
+ if err==nil && !info.IsDir(){return nil,errors.New("trusted server directory missing")}
  home,err:=os.UserHomeDir()
  if err!=nil{return nil,err}
  lockdir:=filepath.Join(home,".omcp-connect")
@@ -38,7 +48,7 @@ func newSupervisor(dir string,memory int)(*supervisor,error){
  lock,err:=os.OpenFile(filepath.Join(lockdir,"native.lock"),os.O_CREATE|os.O_RDWR,0600)
  if err!=nil{return nil,err}
  if err=syscall.Flock(int(lock.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{lock.Close();return nil,errors.New("another native supervisor is active")}
- return &supervisor{dir:resolved,memory:memory,lock:lock},nil
+ return &supervisor{dir:resolved,memory:memory,lock:lock,provision:provision},nil
 }
 
 func(s *supervisor) running()bool{
