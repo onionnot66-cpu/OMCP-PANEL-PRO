@@ -111,7 +111,10 @@ func run() error {
  for {
   var out struct { OK bool `json:"ok"` }
   err := call(c,"heartbeat",c.Credential,map[string]any{"node_id":c.Node,"capabilities":capabilities()},&out)
-  if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK { fmt.Println("Heartbeat accepted") }
+  if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
+   fmt.Println("Heartbeat accepted")
+   if err:=pollJob(c);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
+  }
   select { case <-stop: return nil; case <-time.After(30*time.Second): }
  }
 }
