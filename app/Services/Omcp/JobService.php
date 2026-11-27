@@ -12,10 +12,10 @@ class JobService
         return $this->enqueue($node, 'diagnostic');
     }
 
-    public function enqueue(int $node, string $action): string
+    public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console'], true), 422, 'Unsupported action.');
-        return DB::transaction(function () use ($node, $action) {
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics'], true), 422, 'Unsupported action.');
+        return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
             if ($action !== 'diagnostic') {
@@ -32,6 +32,7 @@ class JobService
                 'id' => $id,
                 'node_id' => $node,
                 'action' => $action,
+                'payload' => json_encode($payload, JSON_THROW_ON_ERROR),
                 'state' => 'queued',
                 'expires_at' => $action === 'diagnostic' ? now()->addMinutes(5) : now()->addSeconds(90),
                 'created_at' => now(),
@@ -58,10 +59,10 @@ class JobService
             DB::table('omcp_jobs')->where('id', $job->id)->update([
                 'state' => 'running',
                 'lease_hash' => hash('sha256', $lease),
-                'expires_at' => now()->addMinutes(2),
+                'expires_at' => now()->addMinutes($job->action === 'native.install' ? 20 : 2),
                 'updated_at' => now(),
             ]);
-            return ['id' => $job->id, 'action' => $job->action, 'lease' => $lease];
+            return ['id' => $job->id, 'action' => $job->action, 'lease' => $lease, 'payload' => json_decode($job->payload ?? '{}', true) ?: (object) []];
         });
     }
 
