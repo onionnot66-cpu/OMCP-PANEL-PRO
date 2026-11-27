@@ -19,6 +19,7 @@ type supervisor struct {
  cmd *exec.Cmd
  input io.WriteCloser
  done chan error
+ console consoleBuffer
 }
 
 func newSupervisor(dir string,memory int)(*supervisor,error){
@@ -59,8 +60,9 @@ func(s *supervisor) start()error{
  cmd.Dir=s.dir
  cmd.Env=[]string{"PATH=/usr/local/bin:/usr/bin:/bin","HOME="+s.dir,"LANG=C.UTF-8"}
  cmd.SysProcAttr=&syscall.SysProcAttr{Pdeathsig:syscall.SIGKILL}
- cmd.Stdout=os.Stdout
- cmd.Stderr=os.Stderr
+ s.console.reset()
+ cmd.Stdout=io.MultiWriter(os.Stdout,&s.console)
+ cmd.Stderr=io.MultiWriter(os.Stderr,&s.console)
  input,err:=cmd.StdinPipe()
  if err!=nil{return err}
  if err=cmd.Start();err!=nil{input.Close();return err}
@@ -97,6 +99,7 @@ func(s *supervisor) execute(action string)(bool,string){
  case "native.stop":err=s.stop(false)
  case "native.kill":err=s.stop(true)
  case "native.restart":if err=s.stop(false);err==nil{err=s.start()}
+ case "native.console":return true,s.console.snapshot()
  case "native.status":
  default:return false,"unsupported native action"
  }
