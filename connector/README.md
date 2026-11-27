@@ -40,3 +40,21 @@ As the dedicated non-root test account, import a trusted server jar using the ex
 ```
 
 Setup refuses existing directories, verifies the jar checksum, writes server.properties with online-mode enabled, and requires Java to be present. It does not download Minecraft or install Java automatically. Admin diagnostics report Java version if available. The admin Console button retrieves at most 3500 bytes of recent process output through a node-scoped job. It is not a live stream or command input. Console output is stored in the panel database as a job result, so use only disposable test workloads and do not log secrets.
+
+## Download a fresh Minecraft release
+
+The experimental CLI supports Vanilla, Paper and Purpur. It resolves an explicit numeric version from upstream metadata, refuses unexpected HTTPS hosts, bounds download size, checks the published checksum (Paper SHA-256, Vanilla SHA-1, Purpur MD5), and creates a NEW server directory without starting the game. SHA-1 and MD5 are legacy integrity checks, not strong authenticity signatures. The source and calculated SHA-256 are recorded locally. Install compatible Java first and read the Minecraft EULA before accepting.
+
+```bash
+~/.local/bin/omcp-connect download --software paper --version 1.21.4 --dir "$HOME/minecraft-paper" --port 25565 --accept-eula
+```
+
+Paper uses the Fill v3 stable build API; Vanilla uses Mojang's version manifest; Purpur uses its v2 latest-successful build API. No fallback to a different Minecraft version is performed. Existing worlds and jars are never overwritten by this command. This is a local CLI, not yet the panel version changer.
+
+With the game and connector stopped, edit supported non-security settings:
+
+```bash
+~/.local/bin/omcp-connect properties --dir "$HOME/minecraft-paper" --key max-players --value 40
+```
+
+Supported keys: difficulty, gamemode, pvp, white-list, allow-flight, spawn-monsters, hardcore, max-players, view-distance, simulation-distance. The editor refuses unusual Java properties syntax rather than risking corruption. Do not run it while a manually started server is active.
