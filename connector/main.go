@@ -81,7 +81,9 @@ func run() error {
  trustedDir := flag.String("trusted-native-dir", "", "opt-in local trusted Minecraft directory; never use for untrusted tenants")
  trustedMemory := flag.Int("trusted-native-memory", 1024, "Java heap MiB, not a hard limit")
  provision := flag.Bool("allow-native-provision", false, "allow admin to create only the configured new trusted directory")
+ allowConsole := flag.Bool("allow-native-console",false,"enable restricted Minecraft console commands from admin")
  flag.Parse()
+ if *allowConsole && *trustedDir==""{return errors.New("console requires --trusted-native-dir")}
  if *provision && *trustedDir=="" {return errors.New("provision requires --trusted-native-dir")}
  var c config
  if *enroll {
@@ -113,6 +115,7 @@ func run() error {
  if *trustedDir!="" {
   native,err=openSupervisor(*trustedDir,*trustedMemory,*provision)
   if err!=nil{return err}
+  native.allowConsole=*allowConsole
   defer native.close()
  }
  stop := make(chan os.Signal,1)
@@ -123,12 +126,15 @@ func run() error {
   caps:=capabilities()
   caps["native_enabled"]=native!=nil
   caps["native_provision"]=native!=nil && native.provision
-  err := call(c,"heartbeat",c.Credential,map[string]any{"node_id":c.Node,"capabilities":caps},&out)
+  caps["native_console_input"]=native!=nil && native.allowConsole
+  payload:=map[string]any{"node_id":c.Node,"capabilities":caps}
+  if native!=nil{payload["telemetry"]=map[string]any{"console":native.console.snapshot(),"metrics":native.metricReport()}}
+  err := call(c,"heartbeat",c.Credential,payload,&out)
   if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
    fmt.Println("Heartbeat accepted")
    if err:=pollJob(c,native);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
   }
-  select { case <-stop: return nil; case <-time.After(30*time.Second): }
+  select { case <-stop: return nil; case <-time.After(5*time.Second): }
  }
 }
 
