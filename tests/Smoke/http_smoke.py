@@ -154,7 +154,7 @@ def wait_for(check, label, timeout=90):
 def connector_main():
     with open(os.environ["OMCP_SMOKE_FIXTURE"], encoding="utf-8") as f:
         node = json.load(f)["connector_node"]
-    admin = login("omcp_ci_admin")
+    admin = login("omcp_ci_connector_admin")
     page = Page(request(admin, f"/admin/nodes/view/{node}/configuration"))
     if not page.csrf:
         raise RuntimeError("Admin CSRF token missing")

@@ -157,12 +157,13 @@ class JobService
         });
     }
 
-    public function authorizeTransfer(int $node, string $credential, string $id, string $lease, string $action): void
+    public function authorizeTransfer(int $node, string $credential, string $id, string $lease, string $action): array
     {
-        DB::transaction(function () use ($node, $credential, $id, $lease, $action) {
+        return DB::transaction(function () use ($node, $credential, $id, $lease, $action) {
             $this->authenticate($node, $credential);
             $job = DB::table('omcp_jobs')->where('node_id', $node)->where('id', $id)->first();
             abort_unless($job && $job->action === $action && $this->ownsLease($job, $lease, now()), 403, 'Transfer lease invalid.');
+            return json_decode($job->payload ?? '{}', true, 32, JSON_THROW_ON_ERROR);
         });
     }
 

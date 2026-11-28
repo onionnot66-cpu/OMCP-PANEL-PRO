@@ -123,10 +123,11 @@ class TransferService
 
     private function nodeRecord(int $node, string $credential, string $id, string $lease, string $direction): object
     {
-        $this->jobs->authorizeTransfer($node, $credential, $id, $lease, 'instance.world_' . $direction);
+        $payload = $this->jobs->authorizeTransfer($node, $credential, $id, $lease, 'instance.world_' . $direction);
         $row = DB::table('omcp_transfers')->where('job_id', $id)->where('node_id', $node)
             ->where('direction', $direction)->where('expires_at', '>', now())->first();
-        abort_unless($row, 404);
+        abort_unless($row && ($payload['instance_id'] ?? null) === $row->instance_id, 404);
+        $row->expected_sha256 = $direction === 'export' ? ($payload['backup_sha256'] ?? null) : ($payload['transfer_sha256'] ?? null);
         return $row;
     }
 
@@ -135,6 +136,7 @@ class TransferService
         $this->nodeRecord($node, $credential, $id, $lease, 'export');
         $this->locked(function ($root) use ($node, $credential, $id, $lease, $size, $sha, $source) {
             $row = $this->nodeRecord($node, $credential, $id, $lease, 'export');
+            abort_unless(is_string($row->expected_sha256) && hash_equals($row->expected_sha256, $sha), 422, 'Export differs from selected backup digest.');
             $dest = $this->path($root, $id);
             if ($row->state === 'ready') {
                 abort_unless((int) $row->bytes === $size && hash_equals($row->sha256, $sha) && is_file($dest) && !is_link($dest)

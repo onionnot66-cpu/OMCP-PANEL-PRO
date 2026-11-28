@@ -154,7 +154,8 @@ func createWorldBackup(ctx context.Context,dir,source,world,id string)(worldBack
  var item worldBackup
  if !instanceIDPattern.MatchString(id){return item,errors.New("invalid backup ID")}
  current,e:=listWorldBackups(dir);if e!=nil{return item,e}
- if len(current)>=5{return item,errors.New("five backups retained; administrator must reconcile storage locally")}
+ physical,e:=filepath.Glob(filepath.Join(dir,"*.zip"));if e!=nil{return item,e}
+ if len(current)>=5||len(physical)>=5{return item,errors.New("five backups retained; administrator must reconcile storage locally")}
  for _,old:=range current{if old.ID==id{return item,errors.New("backup ID already exists")}}
  tmp,e:=os.CreateTemp(dir,".archive-");if e!=nil{return item,e}
  defer os.Remove(tmp.Name())

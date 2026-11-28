@@ -15,6 +15,11 @@ if (!is_string($password) || strlen($password) < 24) {
 $admin = Pterodactyl\Models\User::factory()->admin()->create([
     'username' => 'omcp_ci_admin', 'email' => 'omcp-ci-admin@example.com', 'password' => bcrypt($password),
 ]);
+// Separate test account prevents unrelated smoke phases from sharing
+// the production per-user action rate limit.
+Pterodactyl\Models\User::factory()->admin()->create([
+    'username' => 'omcp_ci_connector_admin', 'email' => 'omcp-ci-connector@example.com', 'password' => bcrypt($password),
+]);
 $owner = Pterodactyl\Models\User::factory()->create([
     'username' => 'omcp_ci_owner', 'email' => 'omcp-ci-owner@example.com', 'password' => bcrypt($password),
 ]);
