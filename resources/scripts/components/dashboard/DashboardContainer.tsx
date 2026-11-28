@@ -10,10 +10,22 @@ import { useStoreState } from 'easy-peasy';
 import { usePersistedState } from '@/plugins/usePersistedState';
 import Switch from '@/components/elements/Switch';
 import tw from 'twin.macro';
+import styled from 'styled-components/macro';
 import useSWR from 'swr';
 import { PaginatedResult } from '@/api/http';
 import Pagination from '@/components/elements/Pagination';
 import { useLocation } from 'react-router-dom';
+
+const WorkspaceHero = styled.section`
+    background: radial-gradient(ellipse at 90% 0%, rgba(118, 85, 215, .32), transparent 62%),
+        linear-gradient(130deg, #232038, #181827);
+    border: 1px solid rgba(167, 139, 250, .22);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18);
+    @media (min-width: 640px) { padding: 32px; }
+`;
 
 export default () => {
     const { search } = useLocation();
@@ -55,7 +67,13 @@ export default () => {
 
     return (
         <PageContentBlock title={'Dashboard'} showFlashKey={'dashboard'}>
+            <WorkspaceHero aria-label="OMCP workspace">
+                <p css={tw`uppercase tracking-widest text-xs text-neutral-400 font-semibold mb-2`}>OMCP / Control center</p>
+                <h1 css={tw`text-2xl sm:text-3xl font-semibold text-white mb-2`}>Your game servers</h1>
+                <p css={tw`text-sm text-neutral-300 max-w-xl`}>Manage your server reservations and existing game servers from one workspace.</p>
+            </WorkspaceHero>
             <OmcpReservations />
+            <h2 css={tw`text-lg font-semibold text-neutral-100 mt-8 mb-3`}>Legacy servers</h2>
             {rootAdmin && (
                 <div css={tw`mb-2 flex justify-end items-center`}>
                     <p css={tw`uppercase text-xs text-neutral-400 mr-2`}>

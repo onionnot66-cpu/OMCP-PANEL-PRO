@@ -13,7 +13,7 @@ export interface PageContentBlockProps {
 const PageContentBlock: React.FC<PageContentBlockProps> = ({ title, showFlashKey, className, children }) => {
     useEffect(() => {
         if (title) {
-            document.title = title;
+            document.title = title + ' | OMCP';
         }
     }, [title]);
 
@@ -26,6 +26,7 @@ const PageContentBlock: React.FC<PageContentBlockProps> = ({ title, showFlashKey
                 </ContentContainer>
                 <ContentContainer css={tw`mb-4`}>
                     <p css={tw`text-center text-neutral-500 text-xs`}>
+                        OMCP Panel · Based on{' '}
                         <a
                             rel={'noopener nofollow noreferrer'}
                             href={'https://pterodactyl.io'}

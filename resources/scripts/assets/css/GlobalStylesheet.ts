@@ -16,6 +16,8 @@ export default createGlobalStyle`
     body {
         ${tw`font-sans bg-neutral-800 text-neutral-200`};
         letter-spacing: 0.015em;
+        background-color: #171724;
+        background-image: radial-gradient(ellipse at 50% 0%, rgba(118,85,215,.10), transparent 650px);
     }
 
     h1, h2, h3, h4, h5, h6 {
@@ -32,6 +34,15 @@ export default createGlobalStyle`
 
     textarea, select, input, button, button:focus, button:focus-visible {
         ${tw`outline-none`};
+    }
+
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: 2px solid #a78bfa;
+        outline-offset: 3px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; }
     }
 
     input[type=number]::-webkit-outer-spin-button,

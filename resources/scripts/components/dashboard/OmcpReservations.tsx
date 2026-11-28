@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import http from '@/api/http';
 import { useStoreState } from 'easy-peasy';
 import tw from 'twin.macro';
+import styled from 'styled-components/macro';
 import OmcpOwnerControls from '@/components/dashboard/OmcpOwnerControls';
 
 interface Reservation {
@@ -21,7 +22,20 @@ interface ReservationPage {
     data: Reservation[];
     current_page: number;
     last_page: number;
+    total: number;
 }
+
+const InstanceCard = styled.article`
+    background: linear-gradient(145deg, #2a283c, #222132);
+    border: 1px solid rgba(167,139,250,.14);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 12px;
+    box-shadow: 0 5px 18px rgba(0,0,0,.12);
+    transition: border-color .18s ease;
+    &:hover { border-color: rgba(167,139,250,.42); }
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+`;
 
 export default function OmcpReservations() {
     const uuid = useStoreState((state) => state.user.data!.uuid);
@@ -36,19 +50,35 @@ export default function OmcpReservations() {
     if (!data.data.length && page === 1) return null;
     return (
         <section css={tw`mb-6`} aria-label="OMCP reservations">
-            <h2 css={tw`text-xl font-medium text-neutral-100 mb-2`}>OMCP reservations</h2>
-            <p css={tw`text-sm text-neutral-400 mb-3`}>Server plans and explicitly granted trusted runtime access.</p>
-            {data.data.map((item) => (
-                <div key={item.id} css={tw`bg-neutral-700 rounded-lg p-4 mb-2`}>
-                    <div css={tw`flex flex-wrap justify-between items-center`}>
-                        <p css={tw`text-neutral-100 font-medium`}>{item.name}</p>
-                        <span css={tw`text-xs text-neutral-300`}>{item.controls_enabled ? 'Trusted controls' : 'Reserved only'}</span>
-                    </div>
-                    <p css={tw`text-sm text-neutral-300 mt-2`}>
-                        {item.software} {item.version} · Port {item.port} · {item.memory_mib} MiB RAM · {item.disk_mib} MiB disk
-                    </p>
-                    {item.controls_enabled && <OmcpOwnerControls instance={item.id} />}
+            <div css={tw`flex flex-wrap justify-between items-baseline mb-3`}>
+                <div>
+                    <h2 css={tw`text-xl font-semibold text-neutral-100 mb-1`}>OMCP reservations</h2>
+                    <p css={tw`text-sm text-neutral-400`}>Server plans and explicitly granted trusted runtime access.</p>
                 </div>
+                <span css={tw`text-sm text-neutral-300`}>{data.total} reservations</span>
+            </div>
+            {data.data.map((item) => (
+                <InstanceCard key={item.id}>
+                    <div css={tw`flex flex-wrap justify-between items-center`}>
+                        <div css={tw`flex items-center min-w-0`}>
+                            <span aria-hidden="true" css={tw`rounded-lg bg-neutral-600 w-10 h-10 flex items-center justify-center mr-3 flex-shrink-0 text-white font-semibold`}>MC</span>
+                            <div css={tw`min-w-0`}>
+                                <h3 css={tw`text-lg text-neutral-100 font-semibold break-words`}>{item.name}</h3>
+                                <p css={tw`text-xs text-neutral-300 capitalize`}>{item.software} {item.version} · {item.runtime || 'Runtime not selected'}</p>
+                            </div>
+                        </div>
+                        <span css={tw`text-xs text-neutral-200 border border-neutral-500 rounded-full px-3 py-1 mt-2 sm:mt-0`}>{item.controls_enabled ? 'Trusted controls' : 'Reserved only'}</span>
+                    </div>
+                    <div css={tw`grid grid-cols-3 gap-2 mt-4`}>
+                        {[['Game port', item.port], ['RAM reserved', item.memory_mib + ' MiB'], ['Disk reserved', item.disk_mib + ' MiB']].map(([label, value]) => (
+                            <div key={label} css={tw`rounded-lg bg-neutral-900 bg-opacity-50 p-3 min-w-0`}>
+                                <p css={tw`text-xs text-neutral-400`}>{label}</p>
+                                <p css={tw`text-sm sm:text-base font-semibold text-white break-words mt-1`}>{value}</p>
+                            </div>
+                        ))}
+                    </div>
+                    {item.controls_enabled && <OmcpOwnerControls instance={item.id} />}
+                </InstanceCard>
             ))}
             {data.last_page > 1 || page > 1 ? (
                 <div css={tw`flex items-center justify-between text-sm text-neutral-300`}>
