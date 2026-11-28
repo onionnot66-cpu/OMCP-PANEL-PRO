@@ -13,6 +13,8 @@ import (
 func serveConnector(ctx context.Context, c config, native *supervisor, multi *fleet, interval time.Duration, execute jobExecutor) error {
 	ticks := time.NewTicker(interval)
 	defer ticks.Stop()
+	type liveGrant struct{ generation string; cursor uint64 }
+	grants:=map[string]liveGrant{}
 	var active chan error
 	defer func() {
 		if active != nil {
@@ -53,8 +55,10 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		payload["runtime"] = runtimeName
 		if multi != nil && multi.allowLiveConsole && multi.allowOwnerControls && (multi.backend == "docker" || multi.backend == "podman") {
 			snapshots := make([]map[string]string, 0, len(multi.servers))
-			for id, server := range multi.servers {
-				snapshots = append(snapshots, map[string]string{"instance_id": id, "output": server.console.snapshot()})
+			for id, grant := range grants {
+				if server, ok := multi.servers[id]; ok {
+					snapshots = append(snapshots, map[string]string{"instance_id": id, "generation": grant.generation, "output": server.console.snapshotSince(grant.cursor)})
+				}
 			}
 			payload["fleet_console"] = snapshots
 		}
@@ -62,8 +66,22 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 			payload["telemetry"] = map[string]any{"console": native.console.snapshot(), "metrics": native.metricReport()}
 			native.mu.Unlock()
 		}
-		var ack struct{ OK bool }
+		var ack struct{
+            OK bool
+            LiveGrants map[string]string `json:"live_grants"`
+        }
 		err := callContext(ctx, c, "heartbeat", c.Credential, payload, &ack)
+        if err==nil && ack.OK && multi!=nil && multi.allowLiveConsole && multi.allowOwnerControls {
+            next:=map[string]liveGrant{}
+            for id,generation:=range ack.LiveGrants{
+                server,ok:=multi.servers[id]
+                if !ok||!instanceIDPattern.MatchString(generation){continue}
+                if old,ok:=grants[id];ok&&old.generation==generation{next[id]=old}else{
+                    next[id]=liveGrant{generation,server.console.cursor()}
+                }
+            }
+            grants=next
+        }
 		if err != nil && ctx.Err() == nil {
 			fmt.Fprintln(os.Stderr, "Heartbeat:", err)
 		}

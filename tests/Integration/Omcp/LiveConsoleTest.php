@@ -47,6 +47,7 @@ class LiveConsoleTest extends OmcpIntegrationTestCase
         $this->denied(404, fn () => $live->read($owner->id, $id));
         $controls->grant($node->id, $id, true);
         $this->assertSame('waiting', $live->read($owner->id, $id)['state']);
+        $payload['fleet_console'][0]['generation'] = $live->grants($node->id, $payload)[$id];
         $live->capture($node->id, $hash, $payload);
         $this->assertDatabaseCount('omcp_live_console', 1);
         $first = $live->read($owner->id, $id);
@@ -65,6 +66,8 @@ class LiveConsoleTest extends OmcpIntegrationTestCase
         $second = $live->read($owner->id, $id);
         $this->assertNotSame($first['generation'], $second['generation']);
         $this->assertSame('', $second['output']);
+        $live->capture($node->id, $hash, $payload);
+        $this->assertDatabaseCount('omcp_live_console', 0);
         DB::table('omcp_connections')->where('node_id', $node->id)->update(['capabilities' => json_encode(array_replace($caps, ['fleet_live_console' => false]))]);
         $this->denied(403, fn () => $live->read($owner->id, $id));
     }

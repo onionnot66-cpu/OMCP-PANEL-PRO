@@ -61,7 +61,8 @@ class ConnectionController extends Controller
             'capabilities.fleet_modpacks' => 'sometimes|boolean',
             'capabilities.fleet_live_console' => 'sometimes|boolean',
             'fleet_console' => 'sometimes|array|max:32',
-            'fleet_console.*' => 'required|array:instance_id,output',
+            'fleet_console.*' => 'required|array:instance_id,generation,output',
+            'fleet_console.*.generation' => 'required|uuid',
             'fleet_console.*.instance_id' => 'required|uuid|distinct',
             'fleet_console.*.output' => 'required|string|max:3500',
             'telemetry' => 'sometimes|array:console,metrics',
@@ -76,7 +77,8 @@ class ConnectionController extends Controller
         ]);
 
         $hash = hash('sha256', $token);
-        $authenticated = DB::transaction(function () use ($data, $hash) {
+        $grants = [];
+        $authenticated = DB::transaction(function () use ($data, $hash, &$grants) {
             $query = DB::table('omcp_connections')->where('node_id', $data['node_id']);
             $record = (clone $query)->lockForUpdate()->first();
             if (!$record || !$record->credential_hash || !hash_equals($record->credential_hash, $hash)) {
@@ -88,11 +90,13 @@ class ConnectionController extends Controller
                 'capabilities' => json_encode($data['capabilities'] + array_intersect_key($data, ['runtime' => true]), JSON_THROW_ON_ERROR),
                 'updated_at' => now(),
             ]);
-            app(\Pterodactyl\Services\Omcp\LiveConsole::class)->capture((int) $data['node_id'], $hash, $data);
+            $console = app(\Pterodactyl\Services\Omcp\LiveConsole::class);
+            $console->capture((int) $data['node_id'], $hash, $data);
+            $grants = $console->grants((int) $data['node_id'], $data);
             return true;
         });
         abort_unless($authenticated, 401, 'Invalid connector credential.');
-        return response()->json(['ok' => true, 'heartbeat_interval' => 5])->header('Cache-Control', 'no-store');
+        return response()->json(['ok' => true, 'heartbeat_interval' => 5] + (!empty($data['capabilities']['fleet_live_console']) ? ['live_grants' => (object) $grants] : []))->header('Cache-Control', 'no-store');
     }
 
     private function token(Request $request): string

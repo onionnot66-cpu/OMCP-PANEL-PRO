@@ -20,20 +20,31 @@ class LiveConsole
             DB::table('omcp_live_console')->whereIn('instance_id', $rows->pluck('id'))->delete();
             return;
         }
-        $snapshots = array_column($data['fleet_console'] ?? [], 'output', 'instance_id');
+        $snapshots = array_column($data['fleet_console'] ?? [], null, 'instance_id');
         $allowed = [];
         foreach ($rows as $row) {
             if (!$row->owner_id || (int) $row->owner_id !== (int) $row->control_owner_id || !$row->control_grant_id
-                || $row->retired_at || $row->retirement_job_id || $row->runtime !== $runtime || !isset($snapshots[$row->id])) {
+                || $row->retired_at || $row->retirement_job_id || $row->runtime !== $runtime || ($snapshots[$row->id]['generation'] ?? null) !== $row->control_grant_id) {
                 continue;
             }
             $allowed[] = $row->id;
             DB::table('omcp_live_console')->updateOrInsert(['instance_id' => $row->id], [
                 'grant_id' => $row->control_grant_id, 'credential_hash' => $credentialHash,
-                'output' => $snapshots[$row->id], 'captured_at' => now(),
+                'output' => $snapshots[$row->id]['output'], 'captured_at' => now(),
             ]);
         }
         DB::table('omcp_live_console')->whereIn('instance_id', $rows->pluck('id'))->whereNotIn('instance_id', $allowed)->delete();
+    }
+
+    public function grants(int $node, array $data): array
+    {
+        if (empty($data['capabilities']['fleet_live_console']) || empty($data['capabilities']['fleet_owner_controls'])
+            || !in_array($data['runtime'] ?? null, ['docker', 'podman'], true)) {
+            return [];
+        }
+        return DB::table('omcp_instances')->where('node_id', $node)->where('runtime', $data['runtime'])
+            ->whereNotNull('owner_id')->whereColumn('owner_id', 'control_owner_id')->whereNotNull('control_grant_id')
+            ->whereNull('retired_at')->whereNull('retirement_job_id')->pluck('control_grant_id', 'id')->all();
     }
 
     public function read(int $owner, string $id): array
