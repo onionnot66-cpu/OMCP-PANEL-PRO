@@ -35,6 +35,42 @@ class ConnectorProtocolTest extends OmcpIntegrationTestCase
         $this->withToken($credential)->postJson('/api/omcp/v1/jobs/claim', ['node_id' => $node->id])->assertOk()->assertJson(['job' => null]);
     }
 
+    public function testHeartbeatIsNodeScopedAndRotationClearsTelemetry(): void
+    {
+        $node = $this->node();
+        $other = $this->node();
+        $service = app(EnrollmentService::class);
+        $token = $service->issue($node->id);
+        $credential = $this->withToken($token)->postJson('/api/omcp/v1/enroll', ['node_id' => $node->id])->assertOk()->json('credential');
+        $payload = [
+            'node_id' => $node->id,
+            'capabilities' => [
+                'os' => 'linux', 'arch' => 'amd64', 'cpus' => 4, 'root' => false,
+                'docker_cli' => false, 'systemd_cli' => false, 'java_cli' => true,
+                'native_enabled' => true, 'native_provision' => true,
+            ],
+            'telemetry' => [
+                'console' => 'Smoke test output',
+                'metrics' => ['process_running' => true, 'java_heap_limit_mib' => 1024, 'cpu_host_percent' => 12.5],
+            ],
+        ];
+        $this->withToken($credential)->postJson('/api/omcp/v1/heartbeat', array_replace($payload, ['node_id' => $other->id]))->assertUnauthorized();
+        $this->withToken($credential)->postJson('/api/omcp/v1/heartbeat', $payload)->assertOk()->assertJson(['ok' => true]);
+        $record = DB::table('omcp_connections')->where('node_id', $node->id)->first();
+        $this->assertNotNull($record->last_seen_at);
+        $this->assertSame('Smoke test output', json_decode($record->telemetry, true)['console']);
+
+        $invalid = $payload;
+        $invalid['capabilities']['fleet_files'] = 'invalid';
+        $this->withToken($credential)->postJson('/api/omcp/v1/heartbeat', $invalid)->assertStatus(422);
+
+        $service->issue($node->id, true);
+        $this->assertDatabaseHas('omcp_connections', [
+            'node_id' => $node->id, 'credential_hash' => null, 'telemetry' => null, 'last_seen_at' => null,
+        ]);
+        $this->withToken($credential)->postJson('/api/omcp/v1/heartbeat', $payload)->assertUnauthorized();
+    }
+
     public function testExpiredEnrollmentFails(): void
     {
         $node = $this->node();
