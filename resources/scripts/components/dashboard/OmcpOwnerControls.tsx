@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import http from '@/api/http';
 import tw from 'twin.macro';
+import OmcpLiveConsole from '@/components/dashboard/OmcpLiveConsole';
 
 interface JobResult {
     state: string;
@@ -68,7 +69,7 @@ export default function OmcpOwnerControls({ instance }: { instance: string }) {
 
     return (
         <div css={tw`mt-4 border-t border-neutral-600 pt-3`} aria-label="Trusted server controls">
-            <p css={tw`text-xs text-neutral-300 mb-2`}>Trusted owner access · snapshots, not a live stream</p>
+            <p css={tw`text-xs text-neutral-300 mb-2`}>Trusted owner access · power and command jobs</p>
             <div css={tw`flex flex-wrap`}>
                 {['start', 'stop', 'restart', 'status', 'metrics', 'console'].map((action) => (
                     <button key={action} type="button" disabled={busy} onClick={() => send(action)}
@@ -85,6 +86,7 @@ export default function OmcpOwnerControls({ instance }: { instance: string }) {
                     css={tw`rounded bg-neutral-600 hover:bg-neutral-500 px-3 py-2 mb-2 text-white`}>Send</button>
             </div>
             <p role="status" css={tw`text-sm text-neutral-300`}>{message}</p>
+            <OmcpLiveConsole instance={instance} />
             {output && <pre css={tw`mt-2 p-3 bg-neutral-900 rounded text-xs text-neutral-200 overflow-auto whitespace-pre-wrap break-words max-h-64`}>{output}</pre>}
         </div>
     );
