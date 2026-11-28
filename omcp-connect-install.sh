@@ -3,10 +3,10 @@ set -euo pipefail
 umask 077
 
 # Development installer; compiles a pinned revision without sudo.
-revision=d62c94a65577b69a6a9d92236d3bc7796aaa4e5a
-base="https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/$revision/connector"
+revision=d372fbf809c77338c1b3e94582d5ed529ad6c0a1
+repo=https://github.com/onionnot66-cpu/OMCP-PANEL-PRO.git
 if [[ "$(uname -s)" != Linux ]]; then echo "Linux required." >&2; exit 1; fi
-for cmd in go curl mktemp install; do
+for cmd in go git mktemp install; do
   command -v "$cmd" >/dev/null || { echo "Missing dependency: $cmd" >&2; exit 1; }
 done
 if [[ "$EUID" -eq 0 ]]; then echo "Run as a dedicated unprivileged connector user, not root." >&2; exit 1; fi
@@ -29,11 +29,12 @@ else
 fi
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
-for file in go.mod main.go native.go main_test.go jobs.go jobs_test.go supervisor.go setup.go console.go console_test.go download.go download_test.go properties.go properties_test.go provision.go provision_test.go telemetry.go telemetry_test.go fleet.go fleet_test.go isolation.go isolation_test.go files.go files_test.go; do
-  curl --proto '=https' --proto-redir '=https' -fLsS --retry 3 "$base/$file" -o "$tmp/$file"
-done
+git -C "$tmp" init -q
+git -C "$tmp" fetch --no-tags --depth=1 "$repo" "$revision"
+[[ "$(git -C "$tmp" rev-parse FETCH_HEAD)" == "$revision" ]]
+git -C "$tmp" checkout --quiet FETCH_HEAD -- connector
 (
-  cd "$tmp"
+  cd "$tmp/connector"
   GOTOOLCHAIN=local CGO_ENABLED=0 go test ./...
   GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o omcp-connect .
 )
@@ -43,13 +44,13 @@ if [[ "$mode" == upgrade ]]; then
   backup="$(mktemp "$HOME/.local/bin/omcp-connect.previous.XXXXXX")"
   install -m 0700 "$dest" "$backup"
   staged="$(mktemp "$HOME/.local/bin/.omcp-connect-new.XXXXXX")"
-  install -m 0700 "$tmp/omcp-connect" "$staged"
+  install -m 0700 "$tmp/connector/omcp-connect" "$staged"
   mv -f -- "$staged" "$dest"
   echo "Upgrade complete. Existing enrollment was preserved. Previous binary: $backup"
   echo "Restart using your previous runtime arguments."
   exit 0
 fi
-install -m 0700 "$tmp/omcp-connect" "$dest"
+install -m 0700 "$tmp/connector/omcp-connect" "$dest"
 echo "Enter your private enrollment token from OMCP admin. Input is hidden."
 IFS= read -r -s token </dev/tty
 echo

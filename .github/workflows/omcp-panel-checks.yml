@@ -16,6 +16,7 @@ on:
       - 'package.json'
       - 'yarn.lock'
       - 'omcp-ui-test-install.sh'
+      - 'scripts/omcp-assets.py'
       - '.github/workflows/omcp-panel-checks.yml'
   workflow_dispatch:
 concurrency:
@@ -85,7 +86,8 @@ jobs:
           echo "APP_KEY=$APP_KEY" >> "$GITHUB_ENV"
           php artisan package:discover --ansi
       - name: Connector integration tests
-        run: vendor/bin/phpunit tests/Integration/Omcp
+        # These tests migrate and seed their own guarded disposable database.
+        run: vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-risky tests/Integration/Omcp
       - name: Frontend build
         id: frontend
         if: ${{ !cancelled() }}
