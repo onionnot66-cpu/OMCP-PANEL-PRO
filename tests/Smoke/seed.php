@@ -13,10 +13,10 @@ if (!is_string($password) || strlen($password) < 24) {
     throw new RuntimeException('A generated smoke-test password is required.');
 }
 $admin = Pterodactyl\Models\User::factory()->admin()->create([
-    'username' => 'omcp_ci_admin', 'email' => 'omcp-ci-admin@example.invalid', 'password' => bcrypt($password),
+    'username' => 'omcp_ci_admin', 'email' => 'omcp-ci-admin@example.com', 'password' => bcrypt($password),
 ]);
 $owner = Pterodactyl\Models\User::factory()->create([
-    'username' => 'omcp_ci_owner', 'email' => 'omcp-ci-owner@example.invalid', 'password' => bcrypt($password),
+    'username' => 'omcp_ci_owner', 'email' => 'omcp-ci-owner@example.com', 'password' => bcrypt($password),
 ]);
 $node = Pterodactyl\Models\Node::factory()->create([
     'location_id' => Pterodactyl\Models\Location::factory()->create()->id,
@@ -31,4 +31,8 @@ $registry = app(Pterodactyl\Services\Omcp\InstanceRegistry::class);
 $common = ['software' => 'paper', 'version' => '1.21.4', 'memory_mib' => 1024, 'disk_mib' => 4096];
 $ownerId = $registry->reserve($node->id, $common + ['owner_id' => $owner->id, 'name' => 'Owner test instance', 'port' => 25565]);
 $adminId = $registry->reserve($node->id, $common + ['owner_id' => $admin->id, 'name' => 'Admin test instance', 'port' => 25566]);
-echo json_encode(['node' => $node->id, 'owner_instance' => $ownerId, 'admin_instance' => $adminId], JSON_THROW_ON_ERROR);
+$connectorNode = Pterodactyl\Models\Node::factory()->create([
+    'location_id' => $node->location_id, 'name' => 'OMCP CI Connector',
+    'memory' => 1024, 'disk' => 4096,
+]);
+echo json_encode(['connector_node' => $connectorNode->id, 'node' => $node->id, 'owner_instance' => $ownerId, 'admin_instance' => $adminId], JSON_THROW_ON_ERROR);

@@ -3,6 +3,8 @@
 import http.cookiejar
 import json
 import os
+import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -100,5 +102,52 @@ def main():
         raise RuntimeError("User dashboard unavailable")
     print("HTTP smoke passed: compiled assets, real login, admin pages, owner scoping and guest denial.")
 
+def wait_for(check, label, timeout=90):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = check()
+        if value:
+            return value
+        time.sleep(1)
+    raise RuntimeError("Timed out: " + label)
+
+def connector_main():
+    with open(os.environ["OMCP_SMOKE_FIXTURE"], encoding="utf-8") as f:
+        node = json.load(f)["connector_node"]
+    admin = login("omcp_ci_admin")
+    page = Page(request(admin, f"/admin/nodes/view/{node}/configuration"))
+    if not page.csrf:
+        raise RuntimeError("Admin CSRF token missing")
+    prefix = f"/admin/nodes/view/{node}/omcp"
+
+    def state():
+        return json.loads(request(admin, prefix + "/status"))
+
+    def telemetry():
+        return state().get("telemetry") or {}
+
+    def job(endpoint, payload):
+        result = json.loads(request(admin, prefix + endpoint, status=202, data=payload, csrf=page.csrf))
+        def completed():
+            response = json.loads(request(admin, prefix + "/diagnostic/" + result["id"]))
+            if response["state"] in ("failed", "expired"):
+                raise RuntimeError("Connector job failed: " + endpoint)
+            return response if response["state"] == "succeeded" else None
+        return wait_for(completed, endpoint)
+
+    wait_for(lambda: state().get("online"), "authenticated heartbeat")
+    job("/diagnostic", {})
+    job("/power", {"action": "start"})
+    wait_for(lambda: "OMCP smoke runtime ready" in telemetry().get("console", ""), "game start")
+    job("/command", {"command": "list"})
+    wait_for(lambda: "OMCP smoke players: 0" in telemetry().get("console", ""), "console response")
+    job("/power", {"action": "stop"})
+    wait_for(lambda: telemetry().get("metrics", {}).get("process_running") is False and
+             "OMCP smoke runtime stopped" in telemetry().get("console", ""), "graceful stop")
+    print("Connector protocol and synthetic runtime smoke passed.")
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--connector"]:
+        connector_main()
+    else:
+        main()
