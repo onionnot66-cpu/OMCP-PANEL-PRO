@@ -120,7 +120,7 @@ func installPluginArtifact(ctx context.Context,dir *os.File,prefix,name string,s
  if !managedPluginName(name)||!strings.HasPrefix(name,prefix)||size<1||size>pluginLimit{return errors.New("invalid plugin artifact")}
  names,e:=pluginNames(dir);if e!=nil{return e}
  if len(names)>=40{return errors.New("managed plugin limit reached")}
- for _,n:=range names{if strings.HasPrefix(n,prefix){return errors.New("managed project already installed; no automatic overwrite")}}
+ for _,n:=range names{if managedHangar.MatchString(n)==managedHangar.MatchString(name)&&strings.HasPrefix(n,prefix){return errors.New("managed project already installed; no automatic overwrite")}}
  tmp,e:=os.CreateTemp(fmt.Sprintf("/proc/self/fd/%d",dir.Fd()),".omcp-plugin-");if e!=nil{return e}
  defer os.Remove(tmp.Name())
  n,e:=io.Copy(io.MultiWriter(tmp,h),io.LimitReader(body,pluginLimit+1))

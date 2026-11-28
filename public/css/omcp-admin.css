@@ -35,3 +35,40 @@ body.skin-blue {
 @media (prefers-reduced-motion: reduce) {
   .skin-blue .main-sidebar, .skin-blue .content-wrapper { transition: none !important; }
 }
+
+/* OMCP game management workspace: scoped to its own pages. */
+.skin-blue .omcp-tool-shell {
+  --tool-surface: #fff;
+  --tool-ink: #211d35;
+  --tool-muted: #655f78;
+  --tool-line: #e5e0ee;
+  color: var(--tool-ink);
+}
+.skin-blue .omcp-tool-hero {
+  background: linear-gradient(125deg, #211934 0%, #3b2c62 67%, #51419b 100%);
+  color: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 12px 32px rgba(34,25,65,.16);
+}
+.skin-blue .omcp-tool-hero h2 { margin: 5px 0 8px; font-size: 26px; font-weight: 700; }
+.skin-blue .omcp-tool-hero p { margin-bottom: 0; color: #e7e0f7; }
+.skin-blue .omcp-tool-eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 700; color: #d7c7ff; }
+.skin-blue .omcp-tool-shell .box { border: 1px solid var(--tool-line); border-radius: 14px; overflow: hidden; box-shadow: 0 6px 20px rgba(31,23,56,.06); }
+.skin-blue .omcp-tool-shell .box-header { padding: 17px 20px; }
+.skin-blue .omcp-tool-shell .box-body { padding: 20px; }
+.skin-blue .omcp-tool-shell .box-title { font-weight: 650; }
+.skin-blue .omcp-tool-shell .well { background: var(--tool-surface); border: 1px solid var(--tool-line); border-radius: 12px; box-shadow: none; padding: 14px; }
+.skin-blue .omcp-tool-shell .well p { color: var(--tool-muted); margin: 6px 0; }
+.skin-blue .omcp-tool-shell .well strong { font-size: 15px; }
+.skin-blue .omcp-tool-shell .btn { margin: 3px 4px 3px 0; }
+.skin-blue .omcp-tool-shell .form-control { min-height: 38px; border-color: #d9d3e4; }
+.skin-blue .omcp-tool-shell pre { background: #211d35; color: #e9e6f5; border: 0; border-radius: 10px; padding: 14px; max-height: 230px; overflow: auto; }
+.skin-blue .omcp-tool-shell .omcp-result-grid { display: grid; gap: 10px; margin-top: 12px; max-height: 540px; overflow-y: auto; }
+.skin-blue .omcp-tool-shell .omcp-result-grid .well { margin-bottom: 0; }
+@media (max-width: 767px) {
+  .skin-blue .omcp-tool-hero { padding: 18px; }
+  .skin-blue .omcp-tool-hero h2 { font-size: 22px; }
+  .skin-blue .omcp-tool-shell .box-body { padding: 14px; }
+}

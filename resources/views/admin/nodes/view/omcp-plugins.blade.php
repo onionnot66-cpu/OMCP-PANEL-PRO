@@ -10,6 +10,8 @@
 @endsection
 
 @section('content')
+<div class="omcp-tool-shell">
+    <div class="omcp-tool-hero"><span class="omcp-tool-eyebrow">OMCP / Game tools</span><h2>Discover &amp; manage plugins</h2><p>{{ $instance->name }} · {{ ucfirst($instance->software) }} {{ $instance->version }} · Modrinth + Hangar</p></div>
 <div class="callout callout-warning">
     <h4>Trusted admin-only plugin management</h4>
     <p>{{ ucfirst($instance->software) }} {{ $instance->version }} · {{ $instance->runtime }}. Stop the server first. Enable --allow-fleet-plugins locally. Only compatible stable versions with verified SHA-512 (Modrinth) or SHA-256 (Hangar) and no required/incompatible dependencies are installable. Review the publisher, license and plugin code before trusting a JAR. Existing JARs will not be overwritten. Data directories are retained on deletion.</p>
@@ -23,7 +25,7 @@
                 <select id="pluginProvider" class="form-control" style="margin-bottom:12px"><option value="modrinth">Modrinth</option><option value="hangar">Hangar</option></select>
                 <div class="input-group"><input id="pluginQuery" maxlength="100" class="form-control" placeholder="Search plugins" aria-label="Plugin search"><span class="input-group-btn"><button id="pluginSearch" class="btn btn-primary" type="button">Search</button></span></div>
                 <p id="pluginCatalogStatus" role="status"></p>
-                <div id="pluginResults"></div>
+                <div id="pluginResults" class="omcp-result-grid"></div>
                 <label for="pluginVersions">Compatible releases</label>
                 <select id="pluginVersions" class="form-control" disabled></select>
                 <p id="pluginDetails" style="overflow-wrap:anywhere"></p>
@@ -36,11 +38,12 @@
             <div class="box-header with-border"><h3 class="box-title">OMCP-managed plugins</h3></div>
             <div class="box-body">
                 <button id="pluginRefresh" type="button" class="btn btn-default">Refresh installed list</button>
-                <div id="pluginInventory"></div>
+                <div id="pluginInventory" class="omcp-result-grid"></div>
                 <pre id="pluginJobStatus" role="status" style="white-space:pre-wrap">No job submitted.</pre>
             </div>
         </div>
     </div>
+</div>
 </div>
 @endsection
 

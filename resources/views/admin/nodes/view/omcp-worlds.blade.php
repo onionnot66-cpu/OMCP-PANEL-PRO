@@ -7,6 +7,8 @@
     <ol class="breadcrumb"><li><a href="{{ route('admin.nodes.omcp.instances', $node->id) }}">Instances</a></li><li class="active">Worlds</li></ol>
 @endsection
 @section('content')
+<div class="omcp-tool-shell">
+    <div class="omcp-tool-hero"><span class="omcp-tool-eyebrow">OMCP / Game tools</span><h2>Protect your worlds</h2><p>{{ $instance->name }} · Local snapshots, verified restore copies and private archive transfer</p></div>
 <div class="callout callout-warning">
     <h4>Offline world operations</h4>
     <p>Stop the server. Enable --allow-fleet-worlds on its connector. A backup covers one world directory, not all server files. Five backups per instance, each up to 256 MiB of world contents. Restore creates a new folder and never replaces the original world. Only Vanilla supports automatic activation. Paper/Purpur dimension folders need independent backups and manual configuration.</p>
@@ -45,6 +47,7 @@
     </div>
 </div>
 <pre id="worldStatus" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere">No job submitted.</pre>
+</div>
 @endsection
 @section('footer-scripts')
 @parent

@@ -43,8 +43,8 @@ class OmcpPluginController extends Controller
         $this->instance($node, $instance);
         $data = $request->validate([
             'action' => 'required|in:plugin_list,plugin_install,plugin_enable,plugin_disable,plugin_delete',
-            'plugin_project' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{3,32}\z/'],
-            'plugin_version' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{3,32}\z/'],
+            'plugin_project' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{1,32}\z/'],
+            'plugin_version' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{1,32}\z/'],
             'plugin_provider' => 'sometimes|in:modrinth,hangar',
             'plugin_sha256' => ['nullable', 'regex:/\A[a-f0-9]{64}\z/'],
             'plugin_sha512' => ['nullable', 'regex:/\A[a-f0-9]{128}\z/'],
