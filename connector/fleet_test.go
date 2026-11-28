@@ -1,6 +1,6 @@
 package main
 
-import "testing"
+import ("context"; "testing")
 
 func TestFleetManifest(t *testing.T){
  a:=fleetEntry{"aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",1024,25565}
@@ -21,5 +21,5 @@ func TestFleetPort(t *testing.T){
 }
 func TestFleetRejectsUnknownTarget(t *testing.T){
  f:=fleet{servers:map[string]*supervisor{},ports:map[string]int{}}
- if ok,_:=f.execute(job{Action:"instance.start",Payload:jobPayload{InstanceID:"unknown"}});ok{t.Fatal("unknown target accepted")}
+ if ok,_:=f.execute(context.Background(),job{Action:"instance.start",Payload:jobPayload{InstanceID:"unknown"}});ok{t.Fatal("unknown target accepted")}
 }

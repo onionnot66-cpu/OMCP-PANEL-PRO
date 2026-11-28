@@ -1,6 +1,7 @@
 package main
 
 import (
+ "context"
  "crypto/md5"
  "crypto/sha1"
  "crypto/sha256"
@@ -39,9 +40,9 @@ var downloadClient=&http.Client{
   return nil
  },
 }
-func fetchDownload(raw string)(io.ReadCloser,error){
+func fetchDownload(ctx context.Context, raw string)(io.ReadCloser,error){
  if !safeDownloadURL(raw){return nil,errors.New("unapproved download URL")}
- req,err:=http.NewRequest(http.MethodGet,raw,nil)
+ req,err:=http.NewRequestWithContext(ctx,http.MethodGet,raw,nil)
  if err!=nil{return nil,err}
  req.Header.Set("User-Agent",userAgent)
  resp,err:=downloadClient.Do(req)
@@ -49,8 +50,8 @@ func fetchDownload(raw string)(io.ReadCloser,error){
  if resp.StatusCode!=200{resp.Body.Close();return nil,fmt.Errorf("download provider returned HTTP %d",resp.StatusCode)}
  return resp.Body,nil
 }
-func metadata(raw string,expectedSHA1 string,out any)error{
- body,err:=fetchDownload(raw)
+func metadata(ctx context.Context,raw string,expectedSHA1 string,out any)error{
+ body,err:=fetchDownload(ctx,raw)
  if err!=nil{return err}
  defer body.Close()
  const limit=16*1024*1024
@@ -64,24 +65,24 @@ func metadata(raw string,expectedSHA1 string,out any)error{
  return json.Unmarshal(data,out)
 }
 type jarSource struct{URL,Checksum,Algorithm,Build string;Size int64}
-func resolveJar(software,version string)(jarSource,error){
+func resolveJar(ctx context.Context,software,version string)(jarSource,error){
  if len(version)>32 || !releaseVersion.MatchString(version){return jarSource{},errors.New("provide a numeric release version, such as 1.21.4")}
  switch software{
  case "vanilla":
   var manifest struct{Versions []struct{ID,Type,URL,SHA1 string}}
-  if err:=metadata("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json","",&manifest);err!=nil{return jarSource{},err}
+  if err:=metadata(ctx,"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json","",&manifest);err!=nil{return jarSource{},err}
   for _,v:=range manifest.Versions{
    if v.ID!=version || v.Type!="release"{continue}
    if len(v.SHA1)!=40{return jarSource{},errors.New("missing version checksum")}
    var m struct{Downloads struct{Server struct{URL,SHA1 string;Size int64}};JavaVersion struct{MajorVersion int}}
-   if err:=metadata(v.URL,v.SHA1,&m);err!=nil{return jarSource{},err}
+   if err:=metadata(ctx,v.URL,v.SHA1,&m);err!=nil{return jarSource{},err}
    d:=m.Downloads.Server
    if m.JavaVersion.MajorVersion>0{fmt.Printf("Required Java major version: %d\n",m.JavaVersion.MajorVersion)}
    return jarSource{d.URL,d.SHA1,"sha1",version,d.Size},nil
   }
  case "paper":
   var builds []struct{ID int;Channel string;Downloads map[string]struct{URL string;Size int64;Checksums struct{SHA256 string}}}
-  if err:=metadata("https://fill.papermc.io/v3/projects/paper/versions/"+version+"/builds","",&builds);err!=nil{return jarSource{},err}
+  if err:=metadata(ctx,"https://fill.papermc.io/v3/projects/paper/versions/"+version+"/builds","",&builds);err!=nil{return jarSource{},err}
   var selected jarSource
   highest:=-1
   for _,b:=range builds{
@@ -94,7 +95,7 @@ func resolveJar(software,version string)(jarSource,error){
  case "purpur":
   base:="https://api.purpurmc.org/v2/purpur/"+version+"/"
   var b struct{Build,Result,MD5 string}
-  if err:=metadata(base+"latest","",&b);err!=nil{return jarSource{},err}
+  if err:=metadata(ctx,base+"latest","",&b);err!=nil{return jarSource{},err}
   if b.Result=="SUCCESS" && regexp.MustCompile("^[0-9]{1,12}$").MatchString(b.Build){
    return jarSource{base+b.Build+"/download",b.MD5,"md5",b.Build,0},nil
   }
@@ -103,7 +104,9 @@ func resolveJar(software,version string)(jarSource,error){
  return jarSource{},errors.New("requested release or successful stable build unavailable")
 }
 
-func downloadMinecraft(args []string)error{
+func downloadMinecraft(args []string)error{return downloadMinecraftContext(context.Background(),args)}
+
+func downloadMinecraftContext(ctx context.Context,args []string)error{
  flags:=flag.NewFlagSet("download",flag.ContinueOnError)
  software:=flags.String("software","paper","vanilla, paper or purpur")
  version:=flags.String("version","","exact Minecraft release")
@@ -114,14 +117,14 @@ func downloadMinecraft(args []string)error{
  if flags.NArg()!=0 || *dir=="" || *port<1024 || *port>65535 || !*eula || os.Geteuid()==0{return errors.New("non-root user, new directory, valid port and explicit EULA acceptance required")}
  if !available("java"){return errors.New("install compatible Java first")}
  if _,err:=os.Lstat(*dir);!os.IsNotExist(err){return errors.New("target directory already exists or cannot be checked")}
- src,err:=resolveJar(*software,*version)
+ src,err:=resolveJar(ctx,*software,*version)
  if err!=nil{return err}
  if src.Size<0 || src.Size>maxJar{return errors.New("invalid provider jar size")}
  var h hash.Hash
  switch src.Algorithm{case "sha256":h=sha256.New();case "sha1":h=sha1.New();case "md5":h=md5.New();default:return errors.New("unsupported checksum")}
  expected,err:=hex.DecodeString(src.Checksum)
  if err!=nil || len(expected)!=h.Size(){return errors.New("missing or invalid upstream checksum")}
- body,err:=fetchDownload(src.URL)
+ body,err:=fetchDownload(ctx,src.URL)
  if err!=nil{return err}
  defer body.Close()
  tmp,err:=os.CreateTemp("","omcp-jar-*.jar")
@@ -133,6 +136,7 @@ func downloadMinecraft(args []string)error{
  if err!=nil{return err};if closeErr!=nil{return closeErr}
  if n<1 || n>maxJar || (src.Size>0 && n!=src.Size) || !strings.EqualFold(hex.EncodeToString(h.Sum(nil)),src.Checksum){return errors.New("provider jar checksum or size mismatch")}
  digest:=hex.EncodeToString(strong.Sum(nil))
+ if err:=ctx.Err();err!=nil{return err}
  if err:=setupMinecraft([]string{"--dir",*dir,"--jar",tmp.Name(),"--sha256",digest,"--port",fmt.Sprint(*port),"--accept-eula"});err!=nil{return err}
  provenance,err:=json.MarshalIndent(map[string]any{"software":*software,"version":*version,"build":src.Build,"upstream_checksum":src.Checksum,"algorithm":src.Algorithm,"sha256":digest},"","  ")
  if err!=nil{return err}

@@ -1,6 +1,7 @@
 package main
 
 import (
+ "context"
  "encoding/json"
  "errors"
  "fmt"
@@ -20,6 +21,8 @@ type fleetEntry struct{
  Port int `json:"port"`
 }
 type fleet struct{
+ allowFiles bool
+ provision bool
  lock *os.File
  servers map[string]*supervisor
  ports map[string]int
@@ -51,7 +54,7 @@ func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,er
  if err=os.MkdirAll(lockdir,0700);err!=nil{return nil,err}
  lock,err:=os.OpenFile(filepath.Join(lockdir,"native.lock"),os.O_CREATE|os.O_RDWR,0600);if err!=nil{return nil,err}
  if err=syscall.Flock(int(lock.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{lock.Close();return nil,errors.New("another native supervisor is active")}
- f:=&fleet{lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
+ f:=&fleet{provision:provision,lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
  for _,e:=range entries{
   dir:=filepath.Join(root,e.ID)
   info,err:=os.Lstat(dir)
@@ -62,7 +65,7 @@ func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,er
  }
  return f,nil
 }
-func(f *fleet) execute(j job)(bool,string){
+func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  s,ok:=f.servers[j.Payload.InstanceID];if !ok{return false,"instance is not locally authorized"}
  if j.Payload.Memory!=s.memory||j.Payload.Port!=f.ports[j.Payload.InstanceID]{return false,"reservation does not match local memory/port manifest"}
  info,err:=os.Lstat(s.dir)
@@ -80,7 +83,7 @@ func(f *fleet) execute(j job)(bool,string){
    if !matchesFleetPort(string(b),j.Payload.Port){return false,"configured port does not match local reservation"}
   }
   j.Action="native."+j.Action[len("instance."):]
-  return s.executeJob(j)
+  return s.executeJob(ctx,j)
  default:return false,"unsupported instance action"
  }
 }

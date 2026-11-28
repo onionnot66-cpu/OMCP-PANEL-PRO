@@ -99,4 +99,48 @@ class ConnectorProtocolTest extends OmcpIntegrationTestCase
         $this->assertDatabaseHas('omcp_jobs', ['id' => $queued, 'state' => 'expired']);
         $this->withToken($credential)->postJson('/api/omcp/v1/jobs/claim', ['node_id' => $node->id])->assertUnauthorized();
     }
+
+    public function testRenewableLeaseIsNodeScopedAndRetryAcknowledgesOnlyTheSameResult(): void
+    {
+        $node = $this->node();
+        $other = $this->node();
+        $token = app(EnrollmentService::class)->issue($node->id);
+        $credential = $this->withToken($token)->postJson('/api/omcp/v1/enroll', ['node_id' => $node->id])->assertOk()->json('credential');
+        $jobs = app(JobService::class);
+        $jobs->enqueueDiagnostic($node->id);
+        $claim = ['node_id' => $node->id, 'renewable' => true];
+        $job = $this->withToken($credential)->postJson('/api/omcp/v1/jobs/claim', $claim)->assertOk()->json('job');
+        $this->assertSame(60, $job['lease_seconds']);
+        $jobs->enqueueDiagnostic($node->id);
+        $this->postJson('/api/omcp/v1/jobs/claim', $claim)->assertOk()->assertJson(['job' => null]);
+        $body = ['node_id' => $node->id, 'id' => $job['id'], 'lease' => $job['lease']];
+        $this->postJson('/api/omcp/v1/jobs/renew', array_replace($body, ['node_id' => $other->id]))->assertUnauthorized();
+        $this->postJson('/api/omcp/v1/jobs/renew', array_replace($body, ['lease' => str_repeat('0', 64)]))->assertConflict();
+        $this->travel(40)->seconds();
+        $this->postJson('/api/omcp/v1/jobs/renew', $body)->assertOk()->assertJson(['lease_seconds' => 60]);
+        $this->travel(45)->seconds();
+        $this->postJson('/api/omcp/v1/jobs/renew', $body)->assertOk()->assertJson(['lease_seconds' => 35]);
+        $complete = $body + ['success' => true, 'result' => 'done'];
+        $this->postJson('/api/omcp/v1/jobs/complete', $complete)->assertOk();
+        $this->postJson('/api/omcp/v1/jobs/complete', $complete)->assertOk();
+        $this->postJson('/api/omcp/v1/jobs/complete', array_replace($complete, ['result' => 'changed']))->assertConflict();
+        $this->postJson('/api/omcp/v1/jobs/complete', array_replace($complete, ['success' => false]))->assertConflict();
+        $this->postJson('/api/omcp/v1/jobs/renew', $body)->assertConflict();
+    }
+
+    public function testLostWorkerExpiresWithoutRedispatchingItsAction(): void
+    {
+        $node = $this->node();
+        $token = app(EnrollmentService::class)->issue($node->id);
+        $credential = $this->withToken($token)->postJson('/api/omcp/v1/enroll', ['node_id' => $node->id])->assertOk()->json('credential');
+        $id = app(JobService::class)->enqueueDiagnostic($node->id);
+        $claim = ['node_id' => $node->id, 'renewable' => true];
+        $job = $this->withToken($credential)->postJson('/api/omcp/v1/jobs/claim', $claim)->assertOk()->json('job');
+        $lease = ['node_id' => $node->id, 'id' => $id, 'lease' => $job['lease']];
+        $this->travel(61)->seconds();
+        $this->postJson('/api/omcp/v1/jobs/renew', $lease)->assertConflict();
+        $this->postJson('/api/omcp/v1/jobs/complete', $lease + ['success' => true, 'result' => 'late'])->assertConflict();
+        $this->postJson('/api/omcp/v1/jobs/claim', $claim)->assertOk()->assertJson(['job' => null]);
+        $this->assertDatabaseHas('omcp_jobs', ['id' => $id, 'state' => 'expired', 'lease_hash' => null]);
+    }
 }

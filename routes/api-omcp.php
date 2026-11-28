@@ -7,4 +7,5 @@ Route::post('/enroll', [ConnectionController::class, 'enroll'])->middleware('thr
 Route::post('/heartbeat', [ConnectionController::class, 'heartbeat'])->middleware('throttle:120,1');
 
 Route::post('/jobs/claim', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'claim'])->middleware('throttle:120,1');
+Route::post('/jobs/renew', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'renew'])->middleware('throttle:120,1');
 Route::post('/jobs/complete', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'complete'])->middleware('throttle:120,1');

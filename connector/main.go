@@ -1,6 +1,7 @@
 package main
 
 import (
+ "context"
  "bufio"
  "bytes"
  "encoding/json"
@@ -32,9 +33,16 @@ var client = &http.Client{
 }
 
 func call(c config, endpoint, token string, payload any, result any) error {
+ return callContext(context.Background(),c,endpoint,token,payload,result)
+}
+
+type panelHTTPError struct { endpoint string; status int }
+func (e panelHTTPError) Error() string {return fmt.Sprintf("%s: HTTP %d", e.endpoint, e.status)}
+
+func callContext(ctx context.Context,c config, endpoint, token string, payload any, result any) error {
  body, err := json.Marshal(payload)
  if err != nil { return err }
- req, err := http.NewRequest(http.MethodPost, c.Panel+"/api/omcp/v1/"+endpoint, bytes.NewReader(body))
+ req, err := http.NewRequestWithContext(ctx,http.MethodPost, c.Panel+"/api/omcp/v1/"+endpoint, bytes.NewReader(body))
  if err != nil { return err }
  req.Header.Set("Authorization", "Bearer "+token)
  req.Header.Set("Content-Type", "application/json")
@@ -42,7 +50,7 @@ func call(c config, endpoint, token string, payload any, result any) error {
  resp, err := client.Do(req)
  if err != nil { return err }
  defer resp.Body.Close()
- if resp.StatusCode != 200 { return fmt.Errorf("%s: HTTP %d", endpoint, resp.StatusCode) }
+ if resp.StatusCode != 200 { return panelHTTPError{endpoint,resp.StatusCode} }
  return json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(result)
 }
 
@@ -132,30 +140,13 @@ func run() error {
   multi,err=openFleet(*fleetRoot,*fleetManifest,*fleetBudget,*provision,*allowConsole)
   if err!=nil{return err}
   defer multi.close()
+  multi.allowFiles=*allowFiles
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   if *fleetImage!=""{if err=multi.enableContainers(*fleetImage,*fleetCPUs,*fleetBudget);err!=nil{return err}}
  }
- stop := make(chan os.Signal,1)
- signal.Notify(stop,os.Interrupt,syscall.SIGTERM)
- defer signal.Stop(stop)
- for {
-  var out struct { OK bool `json:"ok"` }
-  caps:=capabilities()
-  caps["fleet_files"]=multi!=nil && *allowFiles
-  caps["fleet_enabled"]=multi!=nil
-  caps["fleet_provision"]=multi!=nil && *provision
-  caps["native_enabled"]=native!=nil
-  caps["native_provision"]=native!=nil && native.provision
-  caps["native_console_input"]=native!=nil && native.allowConsole
-  payload:=map[string]any{"node_id":c.Node,"capabilities":caps}
-  if native!=nil{payload["telemetry"]=map[string]any{"console":native.console.snapshot(),"metrics":native.metricReport()}}
-  err := call(c,"heartbeat",c.Credential,payload,&out)
-  if err != nil { fmt.Fprintln(os.Stderr,err) } else if out.OK {
-   fmt.Println("Heartbeat accepted")
-   if err:=pollJob(c,native,multi);err!=nil {fmt.Fprintln(os.Stderr,"Job polling:",err)}
-  }
-  select { case <-stop: return nil; case <-time.After(5*time.Second): }
- }
+ ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM)
+ defer cancel()
+ return serveConnector(ctx,c,native,multi,5*time.Second,dispatcher(native,multi))
 }
 
 func main() {

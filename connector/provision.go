@@ -1,6 +1,7 @@
 package main
 
 import (
+ "context"
  "encoding/json"
  "fmt"
  "os"
@@ -25,7 +26,7 @@ type jobPayload struct {
  Value string `json:"value"`
 }
 
-func(s *supervisor) executeJob(j job)(bool,string){
+func(s *supervisor) executeJob(ctx context.Context, j job)(bool,string){
  switch j.Action{
  case "native.install":
   if !s.provision{return false,"local operator must explicitly enable provisioning"}
@@ -33,13 +34,13 @@ func(s *supervisor) executeJob(j job)(bool,string){
   if _,err:=os.Lstat(s.dir);!os.IsNotExist(err){return false,"target already exists or cannot be inspected; no overwrite"}
   p:=j.Payload
   if !p.AcceptEULA{return false,"EULA acceptance required"}
-  err:=downloadMinecraft([]string{"--software",p.Software,"--version",p.Version,"--dir",s.dir,"--port",strconv.Itoa(p.Port),"--accept-eula"})
+  err:=downloadMinecraftContext(ctx, []string{"--software",p.Software,"--version",p.Version,"--dir",s.dir,"--port",strconv.Itoa(p.Port),"--accept-eula"})
   if err!=nil{return false,err.Error()}
   return true,"Minecraft installed in configured directory; not started"
  case "native.command":return s.command(j.Payload.Command)
  case "native.metrics":
   return s.metrics()
- default:return s.execute(j.Action)
+ default:return s.execute(ctx,j.Action)
  }
 }
 

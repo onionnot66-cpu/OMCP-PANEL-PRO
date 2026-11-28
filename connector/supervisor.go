@@ -1,6 +1,8 @@
 package main
 
 import (
+ "context"
+ "sync"
  "errors"
  "fmt"
  "io"
@@ -13,6 +15,7 @@ import (
 
 // Opt-in single trusted server. This is NOT a tenant isolation boundary.
 type supervisor struct {
+ mu sync.Mutex // Serializes heartbeat telemetry and single-server commands.
  dir string
  memory int
  lock *os.File
@@ -115,13 +118,13 @@ func(s *supervisor) stop(force bool)error{
 
 func(s *supervisor) close(){_ = s.stop(false);_ = s.lock.Close()}
 
-func(s *supervisor) execute(action string)(bool,string){
+func(s *supervisor) execute(ctx context.Context, action string)(bool,string){
  var err error
  switch action{
  case "native.start":err=s.start()
  case "native.stop":err=s.stop(false)
  case "native.kill":err=s.stop(true)
- case "native.restart":if err=s.stop(false);err==nil{err=s.start()}
+ case "native.restart":if err=s.stop(false);err==nil{if err=ctx.Err();err==nil{err=s.start()}}
  case "native.console":return true,s.console.snapshot()
  case "native.status":
  default:return false,"unsupported native action"

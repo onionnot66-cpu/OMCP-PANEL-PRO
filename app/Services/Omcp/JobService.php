@@ -2,6 +2,7 @@
 
 namespace Pterodactyl\Services\Omcp;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -60,13 +61,16 @@ class JobService
         });
     }
 
-    public function claim(int $node, string $credential): ?array
+    public function claim(int $node, string $credential, bool $renewable = false): ?array
     {
-        return DB::transaction(function () use ($node, $credential) {
+        return DB::transaction(function () use ($node, $credential, $renewable) {
             $this->authenticate($node, $credential);
             DB::table('omcp_jobs')->where('node_id', $node)
                 ->whereIn('state', ['queued', 'running'])->where('expires_at', '<=', now())
                 ->update(['state' => 'expired', 'lease_hash' => null, 'updated_at' => now()]);
+            if (DB::table('omcp_jobs')->where('node_id', $node)->where('state', 'running')->exists()) {
+                return null;
+            }
             $job = DB::table('omcp_jobs')->where('node_id', $node)
                 ->where('state', 'queued')->where('expires_at', '>', now())
                 ->orderBy('created_at')->orderBy('id')->lockForUpdate()->first();
@@ -74,13 +78,36 @@ class JobService
                 return null;
             }
             $lease = bin2hex(random_bytes(32));
+            $installation = in_array($job->action, ['native.install', 'instance.install'], true);
+            $now = now();
+            $deadline = $now->copy()->addMinutes($installation ? 20 : 2);
+            $expires = $renewable ? $now->copy()->addSeconds(60) : $deadline;
             DB::table('omcp_jobs')->where('id', $job->id)->update([
                 'state' => 'running',
                 'lease_hash' => hash('sha256', $lease),
-                'expires_at' => now()->addMinutes(in_array($job->action, ['native.install', 'instance.install'], true) ? 20 : 2),
+                'expires_at' => $expires,
+                'deadline_at' => $renewable ? $deadline : null,
                 'updated_at' => now(),
             ]);
-            return ['id' => $job->id, 'action' => $job->action, 'lease' => $lease, 'payload' => json_decode($job->payload ?? '{}', true) ?: (object) []];
+            $response = ['id' => $job->id, 'action' => $job->action, 'lease' => $lease, 'payload' => json_decode($job->payload ?? '{}', true) ?: (object) []];
+            return $renewable ? $response + ['lease_seconds' => 60] : $response;
+        });
+    }
+
+    public function renew(int $node, string $credential, string $id, string $lease): int
+    {
+        return DB::transaction(function () use ($node, $credential, $id, $lease) {
+            $this->authenticate($node, $credential);
+            $job = DB::table('omcp_jobs')->where('node_id', $node)->where('id', $id)->lockForUpdate()->first();
+            $now = now();
+            abort_unless($job && $job->deadline_at && $this->ownsLease($job, $lease, $now), 409, 'Job lease is invalid or expired.');
+            $ttl = min(60, Carbon::parse($job->deadline_at)->timestamp - $now->timestamp);
+            abort_if($ttl <= 0, 409, 'Job deadline reached.');
+            DB::table('omcp_jobs')->where('id', $id)->update([
+                'expires_at' => $now->copy()->addSeconds($ttl),
+                'updated_at' => $now,
+            ]);
+            return $ttl;
         });
     }
 
@@ -88,18 +115,29 @@ class JobService
     {
         DB::transaction(function () use ($node, $credential, $data) {
             $this->authenticate($node, $credential);
-            $updated = DB::table('omcp_jobs')->where('id', $data['id'])
-                ->where('node_id', $node)->where('state', 'running')
-                ->where('expires_at', '>', now())
-                ->where('lease_hash', hash('sha256', $data['lease']))
-                ->update([
-                    'state' => $data['success'] ? 'succeeded' : 'failed',
-                    'result' => $data['result'],
-                    'lease_hash' => null,
-                    'updated_at' => now(),
-                ]);
-            abort_unless($updated === 1, 409, 'Job lease is invalid or expired.');
+            $job = DB::table('omcp_jobs')->where('node_id', $node)->where('id', $data['id'])->lockForUpdate()->first();
+            $state = $data['success'] ? 'succeeded' : 'failed';
+            // A terminal receipt authenticates only an identical acknowledgement retry.
+            $receipt = hash_hmac('sha256', 'completed:' . $data['lease'], $credential);
+            if ($job && $job->deadline_at && $job->state === $state && $job->result === $data['result']
+                && hash_equals($job->lease_hash ?? '', $receipt)) {
+                return;
+            }
+
+            abort_unless($job && $this->ownsLease($job, $data['lease'], now()), 409, 'Job lease is invalid or expired.');
+            DB::table('omcp_jobs')->where('id', $job->id)->update([
+                'state' => $state,
+                'result' => $data['result'],
+                'lease_hash' => $job->deadline_at ? $receipt : null,
+                'updated_at' => now(),
+            ]);
         });
+    }
+
+    private function ownsLease(object $job, string $lease, Carbon $now): bool
+    {
+        return $job->state === 'running' && Carbon::parse($job->expires_at)->gt($now)
+            && hash_equals($job->lease_hash ?? '', hash('sha256', $lease));
     }
 
     private function authenticate(int $node, string $credential): void
