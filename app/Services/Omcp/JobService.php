@@ -15,7 +15,7 @@ class JobService
 
     public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property', 'instance.command', 'instance.retire', 'instance.plugin_list', 'instance.plugin_install', 'instance.plugin_enable', 'instance.plugin_disable', 'instance.plugin_delete', 'instance.world_list', 'instance.world_backup_list', 'instance.world_backup', 'instance.world_restore', 'instance.world_activate', 'instance.world_import', 'instance.world_export'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property', 'instance.command', 'instance.retire', 'instance.plugin_list', 'instance.plugin_install', 'instance.plugin_enable', 'instance.plugin_disable', 'instance.plugin_delete', 'instance.world_list', 'instance.world_backup_list', 'instance.world_backup', 'instance.world_restore', 'instance.world_activate', 'instance.world_import', 'instance.world_export', 'instance.version_change', 'instance.version_inspect'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
@@ -26,6 +26,9 @@ class JobService
                     abort_unless(!empty($capabilities['fleet_enabled']), 409, 'Connector has not enabled trusted fleet mode.');
                     if (in_array($action, ['instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property'], true)) {
                         abort_unless(!empty($capabilities['fleet_files']), 409, 'Local file manager opt-in required.');
+                    }
+                    if (str_starts_with($action, 'instance.version_')) {
+                        abort_unless(!empty($capabilities['fleet_versions']) && in_array($capabilities['runtime'] ?? null, ['docker', 'podman'], true), 409, 'Local version manager opt-in required.');
                     }
                     if (str_starts_with($action, 'instance.world_')) {
                         abort_unless(!empty($capabilities['fleet_worlds']) && in_array($capabilities['runtime'] ?? null, ['docker', 'podman'], true), 409, 'Local container world management opt-in required.');
@@ -101,7 +104,7 @@ class JobService
                 }
             }
             $lease = bin2hex(random_bytes(32));
-            $installation = in_array($job->action, ['native.install', 'instance.install', 'instance.world_backup', 'instance.world_restore', 'instance.world_import', 'instance.world_export'], true);
+            $installation = in_array($job->action, ['native.install', 'instance.install', 'instance.world_backup', 'instance.world_restore', 'instance.world_import', 'instance.world_export', 'instance.version_change', 'instance.version_inspect'], true);
             $now = now();
             $deadline = $now->copy()->addMinutes($installation ? 20 : 2);
             $expires = $renewable ? $now->copy()->addSeconds(60) : $deadline;

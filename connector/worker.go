@@ -30,6 +30,7 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		}
 		caps := capabilities()
 		caps["fleet_files"] = multi != nil && multi.allowFiles
+		caps["fleet_versions"] = multi != nil && multi.allowVersions && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_worlds"] = multi != nil && multi.allowWorlds && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_plugins"] = multi != nil && multi.allowPlugins && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_console_input"] = multi != nil && multi.allowConsole
@@ -89,7 +90,7 @@ func pollJob(ctx context.Context, c config, execute jobExecutor) error {
 	}
 	// A panel predating renewal returns no TTL. Keep its existing hard limit.
 	expires := start.Add(2 * time.Minute)
-	if j.Action == "native.install" || j.Action == "instance.install" || j.Action == "instance.world_backup" || j.Action == "instance.world_restore" || j.Action == "instance.world_import" || j.Action == "instance.world_export" {
+	if j.Action == "native.install" || j.Action == "instance.install" || j.Action == "instance.world_backup" || j.Action == "instance.world_restore" || j.Action == "instance.world_import" || j.Action == "instance.world_export" || j.Action == "instance.version_change" || j.Action == "instance.version_inspect" {
 		expires = start.Add(20 * time.Minute)
 	}
 	if j.LeaseSeconds > 0 {

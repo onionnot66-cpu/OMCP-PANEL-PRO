@@ -101,8 +101,10 @@ func run() error {
  allowOwnerControls:=flag.Bool("allow-trusted-owner-controls",false,"allow restricted power and console for explicitly trusted owners of container fleets")
  allowPlugins:=flag.Bool("allow-fleet-plugins",false,"enable offline trusted admin Modrinth plugin management on container fleets")
  allowWorlds:=flag.Bool("allow-fleet-worlds",false,"enable offline trusted admin world backups and restore on container fleets")
+ allowVersions:=flag.Bool("allow-fleet-versions",false,"enable offline trusted admin same-software version upgrades")
  flag.Parse()
  backend,err:=selectRuntime(*selectedRuntime,*trustedDir!="",*fleetRoot!="",*fleetImage,*imageID);if err!=nil{return err}
+ if *allowVersions && (backend!="docker" && backend!="podman"){return errors.New("version management requires a container fleet")}
  if *allowWorlds && (backend!="docker" && backend!="podman"){return errors.New("world management requires a container fleet")}
  if *allowPlugins && (backend!="docker" && backend!="podman"){return errors.New("plugin management requires a container fleet")}
  if *allowOwnerControls && (backend!="docker" && backend!="podman"){return errors.New("trusted owner controls require a container fleet")}
@@ -151,6 +153,7 @@ func run() error {
   multi.allowOwnerControls=*allowOwnerControls
   multi.allowPlugins=*allowPlugins
   multi.allowWorlds=*allowWorlds
+  multi.allowVersions=*allowVersions
   multi.transferConfig=c
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   for _,s:=range multi.servers{

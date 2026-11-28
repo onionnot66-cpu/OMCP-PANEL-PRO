@@ -29,6 +29,7 @@ type fleet struct{
  allowOwnerControls bool
  allowPlugins bool
  allowWorlds bool
+ allowVersions bool
  transferConfig config
  provision bool
  lock *os.File
@@ -83,8 +84,10 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  info,err:=os.Lstat(s.dir)
  if err!=nil&&!os.IsNotExist(err){return false,"instance directory unavailable"}
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}
+ if f.versionBlocked(j.Payload.InstanceID)&&j.Action!="instance.version_inspect"{return false,"unfinished version change; inspect or repair locally"}
  if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  switch j.Action{
+ case "instance.version_change","instance.version_inspect":return f.versionJob(ctx,s,j)
  case "instance.world_list","instance.world_backup_list","instance.world_backup","instance.world_restore","instance.world_activate","instance.world_import","instance.world_export":return f.worldJob(ctx,s,j)
  case "instance.plugin_list","instance.plugin_install","instance.plugin_enable","instance.plugin_disable","instance.plugin_delete":return f.pluginJob(ctx,s,j)
  case "instance.files","instance.file_read","instance.file_write","instance.file_delete","instance.property":return s.fileJob(j)
