@@ -17,6 +17,7 @@ on:
       - 'yarn.lock'
       - 'omcp-ui-test-install.sh'
       - 'scripts/omcp-assets.py'
+      - 'scripts/omcp-console-relay.cjs'
       - '.github/workflows/omcp-panel-checks.yml'
   workflow_dispatch:
 concurrency:
@@ -96,6 +97,7 @@ jobs:
         run: |
           npm install --global yarn@1.22.22
           yarn install --frozen-lockfile --non-interactive
+          node --test tests/Smoke/console-relay.test.cjs
           yarn tsc
           NODE_OPTIONS=--max-old-space-size=4096 yarn build:production
           test -s public/assets/manifest.json
