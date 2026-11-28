@@ -6,24 +6,51 @@ umask 077
 revision=c3b252101c3d647c7a87b64cd245c46d5cd860f0
 repo=https://github.com/onionnot66-cpu/OMCP-PANEL-PRO.git
 dest="$HOME/omcp-ui-test"
-mode="${1:-}"
-if [[ "$#" -gt 1 || ( -n "$mode" && "$mode" != --check && "$mode" != --auto-db ) ]]; then
-    echo 'Usage: bash omcp-ui-test-install.sh [--check|--auto-db]' >&2
+mode=""
+assets=""
+assets_digest=842a4815c4f187d3ab3d883a70dbef341d491a2ed96e2ff0fc081559c2100959
+usage() {
+    echo 'Usage: bash omcp-ui-test-install.sh [--check|--auto-db] [--assets /path/to/omcp-panel-assets.zip]' >&2
     exit 2
-fi
+}
+while (( $# )); do
+    case "$1" in
+        --check|--auto-db)
+            [[ -z "$mode" ]] || usage
+            mode="$1"; shift ;;
+        --assets)
+            [[ "$#" -ge 2 && -z "$assets" && -n "$2" ]] || usage
+            assets="$2"; shift 2 ;;
+        *) usage ;;
+    esac
+done
+if [[ -n "$assets" && "$assets" != /* ]]; then assets="$PWD/$assets"; fi
 
 preflight() {
     local failed=0 cmd
+    local -a required=(git php composer)
+    if [[ -n "$assets" ]]; then required+=(python3 curl sha256sum); else required+=(node yarn); fi
     if [[ "$(uname -s)" != Linux ]]; then echo 'Missing: Linux environment'; failed=1; fi
     if [[ "$EUID" -eq 0 ]]; then echo 'Use a non-root Linux user for installation.'; failed=1; fi
-    for cmd in git php composer node yarn; do
+    for cmd in "${required[@]}"; do
         if command -v "$cmd" >/dev/null; then printf 'Found: %s\n' "$cmd"; else echo "Missing: $cmd"; failed=1; fi
     done
     if command -v php >/dev/null; then
         php -r '$bad=PHP_VERSION_ID<80200; if($bad) echo "PHP 8.2+ required\n"; foreach (["pdo_mysql","mbstring","posix","zip","openssl","curl","xml","dom","fileinfo","ctype","tokenizer","bcmath"] as $e) {if (!extension_loaded($e)) {echo "Missing PHP extension: $e\n"; $bad=true;}} exit($bad?1:0);' || failed=1
     fi
-    if command -v node >/dev/null; then node -e 'if(Number(process.versions.node.split(".")[0])<22){console.log("Node.js 22+ required");process.exit(1)}' || failed=1; fi
-    if command -v yarn >/dev/null; then [[ "$(yarn --version)" == 1.* ]] || { echo 'Yarn Classic (1.x) required.'; failed=1; }; fi
+    if [[ -z "$assets" ]] && command -v node >/dev/null; then node -e 'if(Number(process.versions.node.split(".")[0])<22){console.log("Node.js 22+ required");process.exit(1)}' || failed=1; fi
+    if [[ -z "$assets" ]] && command -v yarn >/dev/null; then [[ "$(yarn --version)" == 1.* ]] || { echo 'Yarn Classic (1.x) required.'; failed=1; }; fi
+    if [[ -n "$assets" ]]; then
+        if [[ ! -f "$assets" || -L "$assets" || ! -r "$assets" ]]; then
+            echo 'Asset ZIP must be a readable regular file.'; failed=1
+        elif command -v sha256sum >/dev/null; then
+            if [[ "$(sha256sum < "$assets" | cut -d ' ' -f 1)" != "$assets_digest" ]]; then
+                echo 'Asset archive checksum mismatch. Download the artifact from run 46166138091.'; failed=1
+            else
+                echo 'Verified pinned CI asset archive; Node/Yarn build will be skipped.'
+            fi
+        fi
+    fi
     if [[ -e "$dest" || -L "$dest" ]]; then echo "Existing installation path: $dest (will not overwrite)"; failed=1; fi
     if [[ "$failed" -ne 0 ]]; then echo 'Preflight failed; resolve the listed items.'; return 1; fi
     echo 'Preflight passed. Database connectivity and network downloads are checked during installation.'
@@ -115,8 +142,18 @@ unset DB_URL DATABASE_URL DB_SOCKET DB_DATABASE DB_USERNAME DB_PASSWORD DB_HOST 
 composer install --no-dev --prefer-dist --no-interaction --no-scripts
 composer check-platform-reqs --no-dev
 php artisan package:discover --ansi
-yarn install --frozen-lockfile --non-interactive
-NODE_OPTIONS=--max-old-space-size=3072 yarn build:production
+if [[ -n "$assets" ]]; then
+    curl --proto '=https' --proto-redir '=https' -fLsS --retry 3 \
+        https://raw.githubusercontent.com/onionnot66-cpu/OMCP-PANEL-PRO/a559af43e1c895f036faa9d9766936ab06f8453d/scripts/omcp-assets.py \
+        -o "$dest/.omcp-assets.py"
+    [[ "$(sha256sum < "$dest/.omcp-assets.py" | cut -d ' ' -f 1)" == 249b3c97a1d8766063c25c01ea75a1b0899436e31151073bb0392a7919ddbc5f ]] || {
+        echo 'Asset verifier checksum mismatch.' >&2; exit 1;
+    }
+    python3 "$dest/.omcp-assets.py" install "$assets" "$dest/public/assets" --sha256 "$assets_digest" --fix-font-integrity
+else
+    yarn install --frozen-lockfile --non-interactive
+    NODE_OPTIONS=--max-old-space-size=3072 yarn build:production
+fi
 test -s public/assets/manifest.json
 # Confirm the application actually targets the disposable database before migrating.
 OMCP_EXPECTED_DB="$db" php -r '
