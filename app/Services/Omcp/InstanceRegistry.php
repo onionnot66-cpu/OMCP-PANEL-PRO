@@ -96,6 +96,7 @@ class InstanceRegistry
                 abort_if($node->isUnderMaintenance() && $action !== 'plugin_list', 409, 'Node is in maintenance.');
             }
             if ($action === 'retire') {
+                abort_if(DB::table('omcp_game_routes')->where('instance_id', $id)->exists(), 409, 'Clear the game endpoint and managed DNS before retirement.');
                 abort_unless(in_array($backend, ['podman', 'docker'], true), 409, 'Retirement requires an isolated container backend.');
             }
             $job = $jobs->enqueue($nodeId, 'instance.' . $action, [
@@ -129,6 +130,7 @@ class InstanceRegistry
             Node::query()->lockForUpdate()->findOrFail($nodeId);
             $row = DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->lockForUpdate()->first();
             abort_unless($row, 404);
+            abort_if(DB::table('omcp_game_routes')->where('instance_id', $id)->exists(), 409, 'Clear the game endpoint before release.');
             if ($row->retired_at) {
                 return; // Idempotent release confirmation; retain the archive record.
             }

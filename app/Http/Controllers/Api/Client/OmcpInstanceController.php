@@ -12,7 +12,15 @@ class OmcpInstanceController extends Controller
     {
         $owner = $request->user()->id;
         $page = $registry->forOwner($owner);
-        $page->through(static function ($row) use ($owner) {
+        $routes = \Illuminate\Support\Facades\DB::table('omcp_game_routes')->whereIn('instance_id', $page->getCollection()->pluck('id'))->get()->keyBy('instance_id');
+        $page->through(static function ($row) use ($owner, $routes) {
+            $route = $routes->get($row->id);
+            if ($route) {
+                $host = $route->dns_state === 'published' ? $route->hostname : $route->endpoint_host;
+                $row->game_address = (str_contains($host, ':') ? '[' . $host . ']' : $host) . ':' . $route->endpoint_port;
+            } else {
+                $row->game_address = null;
+            }
             $row->controls_enabled = (int) $row->control_owner_id === (int) $owner && $row->control_grant_id && !$row->retirement_job_id;
             unset($row->control_owner_id, $row->control_grant_id, $row->retirement_job_id);
             return $row;

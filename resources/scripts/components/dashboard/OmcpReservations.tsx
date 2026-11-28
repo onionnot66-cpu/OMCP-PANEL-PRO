@@ -16,6 +16,7 @@ interface Reservation {
     disk_mib: number;
     controls_enabled: boolean;
     runtime: string | null;
+    game_address: string | null;
 }
 
 interface ReservationPage {
@@ -77,6 +78,7 @@ export default function OmcpReservations() {
                             </div>
                         ))}
                     </div>
+                    {item.game_address && <p css={tw`text-sm mt-3 break-all text-neutral-200`}>Game address (operator configured): {item.game_address}</p>}
                     {item.controls_enabled && <OmcpOwnerControls instance={item.id} />}
                 </InstanceCard>
             ))}

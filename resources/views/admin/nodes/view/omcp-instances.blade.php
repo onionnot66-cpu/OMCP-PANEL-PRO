@@ -96,6 +96,9 @@
                                         <span class="input-group-btn"><button type="button" class="btn btn-primary btn-sm omcpInstanceAction" data-action="command" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">Send</button></span>
                                     </div>
                                     @endif
+                                    @if (!$instance->retirement_job_id)
+                                    <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.network', [$node->id, $instance->id]) }}">Networking</a>
+                                    @endif
                                     @if (in_array($instance->runtime, ['docker', 'podman'], true) && !$instance->retirement_job_id)
                                     <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.worlds', [$node->id, $instance->id]) }}">Worlds &amp; backups</a>
                                     @endif
