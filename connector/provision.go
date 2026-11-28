@@ -13,6 +13,10 @@ import (
 
 type jobPayload struct {
  OwnerControl bool `json:"owner_control"`
+ PluginProject string `json:"plugin_project"`
+ PluginVersion string `json:"plugin_version"`
+ PluginSHA512 string `json:"plugin_sha512"`
+ PluginDisabled bool `json:"plugin_disabled"`
  Runtime string `json:"runtime"`
  Software string `json:"software"`
  Version string `json:"version"`

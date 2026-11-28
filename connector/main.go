@@ -99,8 +99,10 @@ func run() error {
  fleetCPUs:=flag.Int("fleet-podman-cpus",2,"container CPU limit per instance")
  allowFiles:=flag.Bool("allow-fleet-files",false,"enable bounded offline admin text file operations")
  allowOwnerControls:=flag.Bool("allow-trusted-owner-controls",false,"allow restricted power and console for explicitly trusted owners of container fleets")
+ allowPlugins:=flag.Bool("allow-fleet-plugins",false,"enable offline trusted admin Modrinth plugin management on container fleets")
  flag.Parse()
  backend,err:=selectRuntime(*selectedRuntime,*trustedDir!="",*fleetRoot!="",*fleetImage,*imageID);if err!=nil{return err}
+ if *allowPlugins && (backend!="docker" && backend!="podman"){return errors.New("plugin management requires a container fleet")}
  if *allowOwnerControls && (backend!="docker" && backend!="podman"){return errors.New("trusted owner controls require a container fleet")}
  if *allowFiles && *fleetRoot==""{return errors.New("file manager requires trusted fleet mode")}
  if *fleetImage!="" && *fleetRoot==""{return errors.New("Podman requires trusted fleet mode")}
@@ -145,6 +147,7 @@ func run() error {
   defer multi.close()
   multi.allowFiles=*allowFiles
   multi.allowOwnerControls=*allowOwnerControls
+  multi.allowPlugins=*allowPlugins
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   for _,s:=range multi.servers{
    if err=outsideGameDir(s.dir,*path);err!=nil{return err}

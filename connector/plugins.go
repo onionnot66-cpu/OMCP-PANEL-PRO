@@ -109,7 +109,9 @@ func validatePluginJar(path string)error{
  return errors.New("JAR has no Paper/Bukkit plugin descriptor")
 }
 func installPlugin(ctx context.Context,dir *os.File,p jobPayload,src modrinthFile,body io.Reader)error{
+ if !pluginID.MatchString(p.PluginProject)||!pluginID.MatchString(p.PluginVersion)||!pluginHash.MatchString(p.PluginSHA512){return errors.New("invalid plugin selection")}
  names,e:=pluginNames(dir);if e!=nil{return e}
+ if len(names)>=40{return errors.New("managed plugin limit reached")}
  prefix:="omcp-"+p.PluginProject+"-"
  for _,n:=range names{if strings.HasPrefix(n,prefix){return errors.New("managed project already installed; no automatic overwrite")}}
  tmp,e:=os.CreateTemp(fmt.Sprintf("/proc/self/fd/%d",dir.Fd()),".omcp-plugin-");if e!=nil{return e}
@@ -151,6 +153,7 @@ func (f *fleet) pluginJob(ctx context.Context,s *supervisor,j job)(bool,string){
  name:="omcp-"+p.PluginProject+"-"+p.PluginVersion+".jar"
  switch j.Action{
  case "instance.plugin_install":
+  ctx,cancel:=context.WithTimeout(ctx,90*time.Second);defer cancel()
   v,e:=readPluginVersion(ctx,p);if e!=nil{return false,e.Error()}
   src,e:=selectPluginFile(v,p);if e!=nil{return false,e.Error()}
   body,e:=pluginGet(ctx,src.URL,"cdn.modrinth.com");if e!=nil{return false,e.Error()};defer body.Close()

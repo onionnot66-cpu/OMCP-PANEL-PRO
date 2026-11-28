@@ -52,7 +52,7 @@ class InstanceRegistry
 
     public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = [], ?int $ownerId = null): string
     {
-        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire'], true), 422);
+        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire', 'plugin_list', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete'], true), 422);
         if ($ownerId !== null) {
             abort_unless(in_array($action, ['start', 'stop', 'restart', 'status', 'metrics', 'console', 'command'], true), 422);
         }
@@ -87,6 +87,10 @@ class InstanceRegistry
                 // Adopt legacy reservations only after an operator-selected connector identifies its backend.
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime' => $backend]);
             }
+            if (str_starts_with($action, 'plugin_')) {
+                abort_unless(in_array($backend, ['docker', 'podman'], true) && in_array($instance->software, ['paper', 'purpur'], true), 409, 'Plugin management requires a Paper-family container.');
+                abort_if($node->isUnderMaintenance() && $action !== 'plugin_list', 409, 'Node is in maintenance.');
+            }
             if ($action === 'retire') {
                 abort_unless(in_array($backend, ['podman', 'docker'], true), 409, 'Retirement requires an isolated container backend.');
             }
@@ -99,13 +103,13 @@ class InstanceRegistry
                 'port' => (int) $instance->port,
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
-            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command'])));
+            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled'])));
             if ($ownerId !== null) {
                 DB::table('omcp_jobs')->where('id', $job)->update([
                     'requester_id' => $ownerId, 'instance_id' => $id, 'control_grant_id' => $instance->control_grant_id,
                 ]);
             }
-            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property'], true)) {
+            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete'], true)) {
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
             }
             if ($action === 'retire') {
