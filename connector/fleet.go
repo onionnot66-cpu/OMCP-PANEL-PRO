@@ -25,6 +25,7 @@ type fleet struct{
  engine engineCLI
  backend string
  allowFiles bool
+ allowConsole bool
  provision bool
  lock *os.File
  servers map[string]*supervisor
@@ -55,7 +56,7 @@ func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,er
  if err=os.MkdirAll(lockdir,0700);err!=nil{return nil,err}
  lock,err:=os.OpenFile(filepath.Join(lockdir,"native.lock"),os.O_CREATE|os.O_RDWR,0600);if err!=nil{return nil,err}
  if err=syscall.Flock(int(lock.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{lock.Close();return nil,errors.New("another native supervisor is active")}
- f:=&fleet{root:root,backend:"native",provision:provision,lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
+ f:=&fleet{root:root,backend:"native",provision:provision,allowConsole:console,lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
  for _,e:=range entries{
   dir:=filepath.Join(root,e.ID)
   info,err:=os.Lstat(dir)
@@ -75,7 +76,7 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}
  switch j.Action{
  case "instance.files","instance.file_read","instance.file_write","instance.file_delete","instance.property":return s.fileJob(j)
- case "instance.install","instance.start","instance.stop","instance.restart","instance.kill","instance.status","instance.console","instance.metrics":
+ case "instance.install","instance.start","instance.stop","instance.restart","instance.kill","instance.status","instance.console","instance.metrics","instance.command":
   if j.Action=="instance.start"||j.Action=="instance.restart"{
    // Require the reserved port in canonical setup output, not an arbitrary edited config.
    path:=filepath.Join(s.dir,"server.properties")

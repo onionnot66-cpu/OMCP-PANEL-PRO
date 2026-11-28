@@ -24,8 +24,13 @@ class OmcpInstanceController extends Controller
 
     public function action(Request $request, Node $node, string $instance, InstanceRegistry $registry, \Pterodactyl\Services\Omcp\JobService $jobs)
     {
-        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics', 'accept_eula' => 'sometimes|boolean']);
-        $id = $registry->dispatch($node->id, $instance, $data['action'], (bool) ($data['accept_eula'] ?? false), $jobs);
+        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics,command', 'accept_eula' => 'sometimes|boolean', 'command' => 'required_if:action,command|nullable|string|max:256']);
+        $extra = [];
+        if ($data['action'] === 'command') {
+            abort_unless(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed($data['command']), 422, 'Unsupported Minecraft command.');
+            $extra['command'] = $data['command'];
+        }
+        $id = $registry->dispatch($node->id, $instance, $data['action'], (bool) ($data['accept_eula'] ?? false), $jobs, $extra);
         return response()->json(['id' => $id], 202)->header('Cache-Control', 'no-store');
     }
 

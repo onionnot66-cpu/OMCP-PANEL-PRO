@@ -50,7 +50,7 @@ func TestRootlessFleet(t *testing.T) {
 	if err := os.WriteFile(manifest, body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	f, err := openFleet(root, manifest, 1280, false, false)
+	f, err := openFleet(root, manifest, 1280, false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +79,16 @@ func TestRootlessFleet(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+	ok, result := f.execute(context.Background(), job{Action: "instance.command", Payload: jobPayload{InstanceID: entries[0].ID, Memory: entries[0].Memory, Port: entries[0].Port, Runtime: engine, Command: "list"}})
+	if !ok {
+		t.Fatal(result)
+	}
+	until := time.Now().Add(10 * time.Second)
+	for !strings.Contains(run(entries[0], "console"), "list response for "+entries[0].ID) {
+		if time.Now().After(until) { t.Fatal("missing console command response") }
+		time.Sleep(100 * time.Millisecond)
+	}
+	if strings.Contains(run(entries[1], "console"), "list response for") { t.Fatal("console command crossed instance boundary") }
 	run(entries[0], "kill")
 	if !f.servers[entries[1].ID].running() {
 		t.Fatal("second instance stopped")

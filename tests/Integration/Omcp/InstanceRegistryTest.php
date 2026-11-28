@@ -89,6 +89,33 @@ class InstanceRegistryTest extends OmcpIntegrationTestCase
         $registry->reserve($node->id, $this->input($owner, 25567));
     }
 
+    public function testFleetConsoleRequiresLocalOptInAndPreservesInstanceScope(): void
+    {
+        $node = $this->node();
+        $registry = app(InstanceRegistry::class);
+        $id = $registry->reserve($node->id, $this->input(User::factory()->create()) + ['runtime' => 'podman']);
+        $connection = DB::table('omcp_connections')->where('node_id', $node->id);
+        $jobs = app(\Pterodactyl\Services\Omcp\JobService::class);
+        $connection->update(['last_seen_at' => now(), 'capabilities' => json_encode(['fleet_enabled' => true, 'runtime' => 'podman'])]);
+        try {
+            $registry->dispatch($node->id, $id, 'command', false, $jobs, ['command' => 'list']);
+            $this->fail('Console action accepted without local opt-in.');
+        } catch (HttpException $e) {
+            $this->assertSame(409, $e->getStatusCode());
+        }
+        $connection->update(['capabilities' => json_encode(['fleet_enabled' => true, 'runtime' => 'podman', 'fleet_console_input' => true])]);
+        $job = $registry->dispatch($node->id, $id, 'command', false, $jobs, ['command' => 'list', 'instance_id' => 'forged', 'port' => 1234]);
+        $row = DB::table('omcp_jobs')->where('id', $job)->first();
+        $payload = json_decode($row->payload, true);
+        $this->assertSame('instance.command', $row->action);
+        $this->assertSame($id, $payload['instance_id']);
+        $this->assertSame(25565, $payload['port']);
+        $this->assertSame('list', $payload['command']);
+        $this->assertFalse(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed("say hi\nstop"));
+        $this->assertFalse(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed('op user'));
+        $this->assertTrue(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed('list'));
+    }
+
     public function testRuntimeBoundReservationRejectsDowngradeAndOldConnectors(): void
     {
         $node = $this->node();

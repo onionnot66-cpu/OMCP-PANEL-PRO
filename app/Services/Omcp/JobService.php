@@ -15,7 +15,7 @@ class JobService
 
     public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property', 'instance.command'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
@@ -26,6 +26,9 @@ class JobService
                     abort_unless(!empty($capabilities['fleet_enabled']), 409, 'Connector has not enabled trusted fleet mode.');
                     if (in_array($action, ['instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property'], true)) {
                         abort_unless(!empty($capabilities['fleet_files']), 409, 'Local file manager opt-in required.');
+                    }
+                    if ($action === 'instance.command') {
+                        abort_unless(!empty($capabilities['fleet_console_input']), 409, 'Local fleet console input opt-in required.');
                     }
                     if ($action === 'instance.install') {
                         abort_unless(!empty($capabilities['fleet_provision']), 409, 'Local fleet provisioning opt-in required.');

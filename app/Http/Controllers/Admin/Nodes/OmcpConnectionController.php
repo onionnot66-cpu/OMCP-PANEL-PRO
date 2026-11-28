@@ -41,7 +41,7 @@ class OmcpConnectionController extends Controller
         abort_if($node->isUnderMaintenance(), 409, 'Node is in maintenance.');
         $data = $request->validate(['command' => ['required', 'string', 'max:256', 'regex:/\A[^\x00-\x1f\x7f]+\z/']]);
         $command = $data['command'];
-        abort_unless(in_array($command, ['list', 'save-all', 'save-all flush', 'whitelist list', 'time query daytime', 'time query gametime'], true) || (str_starts_with($command, 'say ') && trim(substr($command, 4)) !== ''), 422, 'Unsupported Minecraft command.');
+        abort_unless(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed($command), 422, 'Unsupported Minecraft command.');
         return response()->json(['id' => $jobs->enqueue($node->id, 'native.command', ['command' => $command])], 202)->header('Cache-Control', 'no-store');
     }
 

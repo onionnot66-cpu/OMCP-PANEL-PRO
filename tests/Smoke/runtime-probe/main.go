@@ -29,6 +29,9 @@ func main() {
 	fmt.Printf("instance=%s memory=%s pids=%s cpu=%s\n", read("/server/fixture-id"), read("/sys/fs/cgroup/memory.max"), read("/sys/fs/cgroup/pids.max"), read("/sys/fs/cgroup/cpu.max"))
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
+		if scanner.Text() == "list" {
+			fmt.Printf("list response for %s\n", read("/server/fixture-id"))
+		}
 		if scanner.Text() == "stop" {
 			return
 		}

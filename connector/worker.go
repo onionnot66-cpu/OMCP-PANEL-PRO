@@ -30,6 +30,7 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		}
 		caps := capabilities()
 		caps["fleet_files"] = multi != nil && multi.allowFiles
+		caps["fleet_console_input"] = multi != nil && multi.allowConsole
 		caps["fleet_enabled"] = multi != nil
 		caps["fleet_provision"] = multi != nil && multi.provision
 		caps["native_enabled"] = native != nil

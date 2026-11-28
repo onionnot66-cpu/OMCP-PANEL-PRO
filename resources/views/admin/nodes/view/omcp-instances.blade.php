@@ -79,6 +79,10 @@
                                             <button type="button" class="btn btn-default btn-xs omcpInstanceAction" data-action="{{ $action }}" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ ucfirst($action) }}</button>
                                         @endforeach
                                     </div>
+                                    <div class="input-group" style="margin-bottom:6px">
+                                        <input type="text" class="form-control input-sm omcpFleetCommand" maxlength="256" autocomplete="off" aria-label="Restricted console command for {{ $instance->name }}" placeholder="list, save-all, say Hello">
+                                        <span class="input-group-btn"><button type="button" class="btn btn-primary btn-sm omcpInstanceAction" data-action="command" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">Send</button></span>
+                                    </div>
                                     @if (!$instance->runtime_requested_at)
                                     <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release this reservation? No game files will be deleted.');">@csrf @method('DELETE')<button class="btn btn-danger btn-xs" type="submit">Release</button></form>
                                     @endif
@@ -206,10 +210,17 @@
                 return;
             }
             if (action === 'kill' && !window.confirm('Force stop? Unsaved changes may be lost.')) return;
+            const commandInput = $(this).closest('td').find('.omcpFleetCommand');
+            const body = {action: action, accept_eula: $('#fleetEula').prop('checked') ? 1 : 0};
+            if (action === 'command') {
+                body.command = commandInput.val();
+                if (!body.command || !body.command.trim()) return;
+            }
             const controls = $('.omcpInstanceAction').prop('disabled', true);
-            const output = $('#fleetOutput').text('Queueing ' + action + '...');
-            $.ajax({method:'POST',url:$(this).data('url'),data:{action:action,accept_eula:$('#fleetEula').prop('checked') ? 1 : 0},dataType:'json',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}'}})
+            const output = $('#fleetOutput').text('Queueing ' + action + ' for ' + $(this).closest('tr').find('td:first').text().trim() + '...');
+            $.ajax({method:'POST',url:$(this).data('url'),data:body,dataType:'json',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}'}})
                 .done(function (data) {
+                    if (action === 'command') commandInput.val('');
                     const url = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}'.replace('JOB_ID', encodeURIComponent(data.id));
                     let attempts = 0;
                     function poll() {
