@@ -66,9 +66,12 @@ func TestRootlessFleet(t *testing.T) {
 		}
 		return result
 	}
-	for _, e := range entries {
-		run(e, "start")
-	}
+	firstPayload:=jobPayload{InstanceID:entries[0].ID,Memory:entries[0].Memory,Port:entries[0].Port,Runtime:engine,OwnerControl:true}
+	if ok,_:=f.execute(context.Background(),job{Action:"instance.start",Payload:firstPayload});ok{t.Fatal("owner action accepted without opt-in")}
+	f.allowOwnerControls=true
+	if ok,result:=f.execute(context.Background(),job{Action:"instance.start",Payload:firstPayload});!ok{t.Fatal(result)}
+	run(entries[1],"start")
+	if ok,_:=f.execute(context.Background(),job{Action:"instance.retire",Payload:firstPayload});ok{t.Fatal("owner retirement accepted")}
 	for _, e := range entries {
 		want := fmt.Sprintf("instance=%s memory=671088640 pids=512 cpu=100000 100000", e.ID)
 		until := time.Now().Add(25 * time.Second)

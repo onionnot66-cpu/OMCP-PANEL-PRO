@@ -1,0 +1,7 @@
+# Trusted owner controls
+
+The owner dashboard supports restricted start, stop, restart, status, metrics, console snapshots and the existing command allowlist. This is an explicit trusted-user feature, not general customer hosting. Enable the local connector flag `--allow-trusted-owner-controls` on a dedicated Docker or Podman fleet and, for commands, `--allow-native-console`. Then grant the exact owner's reservation via the admin instance page. No native mode, file actions, software installation, force kill, retirement or arbitrary commands are available through these controls.
+
+Each queued owner job stores its requester, instance UUID and grant generation. The panel checks ownership under the existing node/instance lock, checks the matching backend and local capability, and checks the grant again at claim. Revocation expires queued jobs; already claimed operations may finish. Old results become inaccessible on revocation, retirement or ownership change, even if a new grant is issued. Admin jobs are never visible via owner endpoints. Failed owner jobs omit host-side error details. Console snapshots may include sensitive game data; grant only to trusted owners of trusted workloads. No claim of hostile-tenant security is made.
+
+The owner dashboard refreshes grants every 15 seconds and polls individual job results every 3 seconds. It does not stream logs or automatically retry a mutating request. A job submission does not prove game readiness. Existing serialized node jobs may return busy.

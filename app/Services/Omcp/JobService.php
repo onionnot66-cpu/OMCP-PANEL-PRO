@@ -83,6 +83,17 @@ class JobService
             if (!$job) {
                 return null;
             }
+            if ($job->control_grant_id) {
+                $instance = DB::table('omcp_instances')->where('id', $job->instance_id)->where('node_id', $node)
+                    ->where('control_grant_id', $job->control_grant_id)->whereNotNull('owner_id')
+                    ->where('owner_id', $job->requester_id)->where('control_owner_id', $job->requester_id)
+                    ->whereNull('retired_at')->whereNull('retirement_job_id')->first();
+                $caps = json_decode(DB::table('omcp_connections')->where('node_id', $node)->value('capabilities') ?? '{}', true);
+                if (!$instance || !$job->requester_id || empty($caps['fleet_owner_controls']) || ($caps['runtime'] ?? null) !== $instance->runtime) {
+                    DB::table('omcp_jobs')->where('id', $job->id)->update(['state' => 'expired', 'lease_hash' => null, 'updated_at' => now()]);
+                    return null;
+                }
+            }
             $lease = bin2hex(random_bytes(32));
             $installation = in_array($job->action, ['native.install', 'instance.install'], true);
             $now = now();
