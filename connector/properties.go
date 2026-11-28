@@ -12,6 +12,7 @@ import (
 
 func validProperty(key,value string)bool{
  switch key{
+ case "level-name":return validWorldName(value)
  case "difficulty":return value=="peaceful"||value=="easy"||value=="normal"||value=="hard"
  case "gamemode":return value=="survival"||value=="creative"||value=="adventure"||value=="spectator"
  case "pvp","white-list","allow-flight","spawn-monsters","hardcore":return value=="true"||value=="false"

@@ -28,6 +28,7 @@ type fleet struct{
  allowConsole bool
  allowOwnerControls bool
  allowPlugins bool
+ allowWorlds bool
  provision bool
  lock *os.File
  servers map[string]*supervisor
@@ -83,6 +84,7 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}
  if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  switch j.Action{
+ case "instance.world_list","instance.world_backup_list","instance.world_backup","instance.world_restore","instance.world_activate":return f.worldJob(ctx,s,j)
  case "instance.plugin_list","instance.plugin_install","instance.plugin_enable","instance.plugin_disable","instance.plugin_delete":return f.pluginJob(ctx,s,j)
  case "instance.files","instance.file_read","instance.file_write","instance.file_delete","instance.property":return s.fileJob(j)
  case "instance.install","instance.start","instance.stop","instance.restart","instance.kill","instance.status","instance.console","instance.metrics","instance.command":

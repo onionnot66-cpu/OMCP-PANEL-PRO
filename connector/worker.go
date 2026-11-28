@@ -30,6 +30,7 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		}
 		caps := capabilities()
 		caps["fleet_files"] = multi != nil && multi.allowFiles
+		caps["fleet_worlds"] = multi != nil && multi.allowWorlds && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_plugins"] = multi != nil && multi.allowPlugins && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_console_input"] = multi != nil && multi.allowConsole
 		caps["fleet_retire"] = multi != nil && (multi.backend == "podman" || multi.backend == "docker")

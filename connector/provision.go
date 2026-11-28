@@ -13,6 +13,9 @@ import (
 
 type jobPayload struct {
  OwnerControl bool `json:"owner_control"`
+ World string `json:"world"`
+ BackupID string `json:"backup_id"`
+ BackupSHA256 string `json:"backup_sha256"`
  PluginProject string `json:"plugin_project"`
  PluginVersion string `json:"plugin_version"`
  PluginSHA512 string `json:"plugin_sha512"`
