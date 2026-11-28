@@ -60,6 +60,9 @@ jobs:
       - name: Start rootless Docker
         if: matrix.engine == 'docker'
         run: |
+          curl --proto '=https' -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$RUNNER_TEMP/docker.asc"
+          sudo install -m 0644 "$RUNNER_TEMP/docker.asc" /etc/apt/keyrings/omcp-ci-docker.asc
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/omcp-ci-docker.asc] https://download.docker.com/linux/ubuntu noble stable" | sudo tee /etc/apt/sources.list.d/omcp-ci-docker.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends docker-ce-rootless-extras uidmap slirp4netns
           dockerd-rootless-setuptool.sh install --force
