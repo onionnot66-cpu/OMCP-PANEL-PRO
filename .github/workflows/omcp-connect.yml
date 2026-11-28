@@ -49,12 +49,19 @@ jobs:
           cache: false
       - name: Prepare the runner user service manager
         run: |
+          unit="user@$(id -u).service"
+          sudo mkdir -p "/etc/systemd/system/$unit.d"
+          printf '[Service]\nDelegate=cpu cpuset io memory pids\n' | sudo tee "/etc/systemd/system/$unit.d/delegate.conf"
+          sudo systemctl daemon-reload
           sudo loginctl enable-linger "$USER"
-          sudo systemctl start "user@$(id -u).service"
+          sudo systemctl restart "$unit"
           echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
       - name: Start rootless Docker
         if: matrix.engine == 'docker'
-        run: dockerd-rootless-setuptool.sh install --force
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends docker-ce-rootless-extras uidmap slirp4netns
+          dockerd-rootless-setuptool.sh install --force
       - name: Exercise two isolated fixture processes
         run: systemd-run --user --scope -p Delegate=yes env PATH="$PATH" bash tests/Smoke/rootless-fleet.sh "${{ matrix.engine }}"

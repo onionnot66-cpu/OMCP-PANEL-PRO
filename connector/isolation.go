@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -56,9 +57,9 @@ func checkContainerRuntime(engine, image string, cpus int) (engineCLI, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if engine == "podman" {
-		out, err := e.cmd(ctx, "info", "--format", "{{.Host.Security.Rootless}} {{.Host.CgroupVersion}}").Output()
-		if err != nil || strings.TrimSpace(string(out)) != "true v2" {
-			return e, errors.New("local rootless Podman and cgroup v2 required")
+		out, err := e.cmd(ctx, "info", "--format", "json").Output()
+		if err != nil || !supportsRootlessPodman(out) {
+			return e, errors.New("local rootless Podman with delegated cgroup v2 CPU, memory and PID controllers required")
 		}
 	} else {
 		info, err := os.Lstat(fmt.Sprintf("/run/user/%d/docker.sock", os.Getuid()))
@@ -81,6 +82,21 @@ func checkContainerRuntime(engine, image string, cpus int) (engineCLI, error) {
 		return engineCLI{}, errors.New("approved local image unavailable")
 	}
 	return e, nil
+}
+
+func supportsRootlessPodman(data []byte) bool {
+	var info struct {
+		Host struct {
+			Security          struct{ Rootless bool }
+			CgroupVersion     string
+			CgroupControllers []string
+		}
+	}
+	if json.Unmarshal(data, &info) != nil || !info.Host.Security.Rootless || info.Host.CgroupVersion != "v2" {
+		return false
+	}
+	controllers := info.Host.CgroupControllers
+	return slices.Contains(controllers, "cpu") && slices.Contains(controllers, "memory") && slices.Contains(controllers, "pids")
 }
 
 func supportsRootlessDocker(data []byte) bool {
