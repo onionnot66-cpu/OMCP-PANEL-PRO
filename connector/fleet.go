@@ -31,6 +31,7 @@ type fleet struct{
  allowWorlds bool
  allowVersions bool
  allowModpacks bool
+ allowLiveConsole bool
  transferConfig config
  provision bool
  lock *os.File

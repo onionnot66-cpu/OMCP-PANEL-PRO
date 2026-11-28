@@ -42,6 +42,11 @@ class OmcpInstanceController extends Controller
         return response()->json(['id' => $id], 202)->header('Cache-Control', 'no-store');
     }
 
+    public function liveConsole(Request $request, string $instance, \Pterodactyl\Services\Omcp\LiveConsole $console)
+    {
+        return response()->json($console->read((int) $request->user()->id, $instance))->header('Cache-Control', 'private, no-store');
+    }
+
     public function result(Request $request, string $instance, string $job, \Pterodactyl\Services\Omcp\OwnerControls $controls)
     {
         return response()->json($controls->result((int) $request->user()->id, $instance, $job))->header('Cache-Control', 'no-store');

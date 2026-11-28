@@ -103,8 +103,10 @@ func run() error {
  allowWorlds:=flag.Bool("allow-fleet-worlds",false,"enable offline trusted admin world backups and restore on container fleets")
  allowVersions:=flag.Bool("allow-fleet-versions",false,"enable offline trusted admin same-software version upgrades")
  allowModpacks:=flag.Bool("allow-fleet-modpacks",false,"enable admin verified modpack archive staging (not installation)")
+ allowLiveConsole:=flag.Bool("allow-fleet-live-console",false,"send bounded trusted fleet console snapshots for explicitly granted owners")
  flag.Parse()
  backend,err:=selectRuntime(*selectedRuntime,*trustedDir!="",*fleetRoot!="",*fleetImage,*imageID);if err!=nil{return err}
+ if *allowLiveConsole && !*allowOwnerControls{return errors.New("live console requires trusted owner controls")}
  if *allowModpacks && (backend!="docker" && backend!="podman"){return errors.New("modpack staging requires a container fleet")}
  if *allowVersions && (backend!="docker" && backend!="podman"){return errors.New("version management requires a container fleet")}
  if *allowWorlds && (backend!="docker" && backend!="podman"){return errors.New("world management requires a container fleet")}
@@ -157,6 +159,7 @@ func run() error {
   multi.allowWorlds=*allowWorlds
   multi.allowVersions=*allowVersions
   multi.allowModpacks=*allowModpacks
+  multi.allowLiveConsole=*allowLiveConsole
   multi.transferConfig=c
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   for _,s:=range multi.servers{

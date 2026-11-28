@@ -30,6 +30,7 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		}
 		caps := capabilities()
 		caps["fleet_files"] = multi != nil && multi.allowFiles
+		caps["fleet_live_console"] = multi != nil && multi.allowLiveConsole && multi.allowOwnerControls && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_modpacks"] = multi != nil && multi.allowModpacks && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_versions"] = multi != nil && multi.allowVersions && (multi.backend == "docker" || multi.backend == "podman")
 		caps["fleet_worlds"] = multi != nil && multi.allowWorlds && (multi.backend == "docker" || multi.backend == "podman")
@@ -50,6 +51,13 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 			runtimeName = multi.backend
 		}
 		payload["runtime"] = runtimeName
+		if multi != nil && multi.allowLiveConsole && multi.allowOwnerControls && (multi.backend == "docker" || multi.backend == "podman") {
+			snapshots := make([]map[string]string, 0, len(multi.servers))
+			for id, server := range multi.servers {
+				snapshots = append(snapshots, map[string]string{"instance_id": id, "output": server.console.snapshot()})
+			}
+			payload["fleet_console"] = snapshots
+		}
 		if native != nil && native.mu.TryLock() {
 			payload["telemetry"] = map[string]any{"console": native.console.snapshot(), "metrics": native.metricReport()}
 			native.mu.Unlock()

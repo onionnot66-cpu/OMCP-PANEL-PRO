@@ -28,6 +28,7 @@ class OwnerControls
             DB::table('omcp_jobs')->where('node_id', $node)->where('instance_id', $id)
                 ->whereNotNull('control_grant_id')->where('state', 'queued')
                 ->update(['state' => 'expired', 'lease_hash' => null, 'updated_at' => now()]);
+            DB::table('omcp_live_console')->where('instance_id', $id)->delete();
             DB::table('omcp_instances')->where('id', $id)->update([
                 'control_owner_id' => $enabled ? $instance->owner_id : null,
                 'control_grant_id' => $enabled ? (string) Str::uuid() : null,
