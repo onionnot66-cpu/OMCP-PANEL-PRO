@@ -26,6 +26,7 @@ type fleet struct{
  backend string
  allowFiles bool
  allowConsole bool
+ allowOwnerControls bool
  provision bool
  lock *os.File
  servers map[string]*supervisor
@@ -70,6 +71,7 @@ func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,er
 }
 func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  if j.Payload.Runtime!="" && j.Payload.Runtime!=f.backend{return false,"reserved runtime differs from local fleet backend"}
+ if j.Payload.OwnerControl && !f.ownerActionAllowed(j.Action){return false,"trusted owner controls disabled or unsupported"}
  s,ok:=f.servers[j.Payload.InstanceID];if !ok{return false,"instance is not locally authorized"}
  if j.Payload.Memory!=s.memory||j.Payload.Port!=f.ports[j.Payload.InstanceID]{return false,"reservation does not match local memory/port manifest"}
  retired,err:=f.retired(j.Payload.InstanceID)
@@ -127,4 +129,13 @@ func(f *fleet) enableContainers(engine,image string,cpus,budget int)error{
   s.backend=&containerRuntime{engineCLI:runner,image:image,containerName:"omcp-"+id,port:f.ports[id],memory:s.memory+512,cpus:cpus}
  }
  return nil
+}
+
+func(f *fleet) ownerActionAllowed(action string)bool{
+ if !f.allowOwnerControls || (f.backend!="docker" && f.backend!="podman"){return false}
+ switch action{
+ case "instance.start","instance.stop","instance.restart","instance.status","instance.metrics","instance.console":return true
+ case "instance.command":return f.allowConsole
+ default:return false
+ }
 }

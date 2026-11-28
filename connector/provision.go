@@ -12,6 +12,7 @@ import (
 )
 
 type jobPayload struct {
+ OwnerControl bool `json:"owner_control"`
  Runtime string `json:"runtime"`
  Software string `json:"software"`
  Version string `json:"version"`

@@ -50,17 +50,23 @@ class InstanceRegistry
         });
     }
 
-    public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = []): string
+    public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = [], ?int $ownerId = null): string
     {
         abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire'], true), 422);
+        if ($ownerId !== null) {
+            abort_unless(in_array($action, ['start', 'stop', 'restart', 'status', 'metrics', 'console', 'command'], true), 422);
+        }
         abort_if($action === 'install' && !$acceptEula, 422, 'Minecraft EULA acceptance required.');
 
-        return DB::transaction(function () use ($nodeId, $id, $action, $acceptEula, $jobs, $extra) {
+        return DB::transaction(function () use ($nodeId, $id, $action, $acceptEula, $jobs, $extra, $ownerId) {
             $node = Node::query()->lockForUpdate()->findOrFail($nodeId);
             abort_if($node->isUnderMaintenance() && in_array($action, ['install', 'start', 'restart', 'command'], true), 409, 'Node is in maintenance.');
             abort_if(DB::table('servers')->where('node_id', $nodeId)->exists(), 409, 'Use a dedicated OMCP node.');
             $instance = DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->lockForUpdate()->first();
-            abort_unless($instance, 404);
+            abort_unless($instance && ($ownerId === null || (int) $instance->owner_id === $ownerId), 404);
+            if ($ownerId !== null) {
+                abort_unless((int) $instance->control_owner_id === $ownerId && $instance->control_grant_id && !$instance->retirement_job_id && in_array($instance->runtime, ['docker', 'podman'], true), 403, 'Trusted owner controls are not enabled.');
+            }
             abort_if($instance->retired_at, 409, 'Instance is retired.');
             abort_if($instance->retirement_job_id && !in_array($action, ['retire', 'stop', 'kill', 'status', 'console', 'metrics'], true), 409, 'Retirement requested; runtime changes are blocked.');
             if ($action === 'retire' && $instance->retirement_job_id) {
@@ -72,6 +78,9 @@ class InstanceRegistry
             abort_if(DB::table('allocations')->where('node_id', $nodeId)->where('port', $instance->port)->exists(), 409, 'Legacy allocation conflicts with instance port.');
             $capabilities = json_decode(DB::table('omcp_connections')->where('node_id', $nodeId)->lockForUpdate()->value('capabilities') ?? '{}', true);
             $backend = $capabilities['runtime'] ?? null;
+            if ($ownerId !== null) {
+                abort_unless(!empty($capabilities['fleet_owner_controls']), 409, 'Local trusted owner controls are not enabled.');
+            }
             if ($instance->runtime !== null) {
                 abort_unless($backend === $instance->runtime, 409, 'The connector runtime differs from this reservation.');
             } elseif (in_array($backend, ['native', 'podman', 'docker'], true)) {
@@ -83,6 +92,7 @@ class InstanceRegistry
             }
             $job = $jobs->enqueue($nodeId, 'instance.' . $action, [
                 'instance_id' => $instance->id,
+                'owner_control' => $ownerId !== null,
                 'runtime' => $backend,
                 'software' => $instance->software,
                 'version' => $instance->version,
@@ -90,6 +100,11 @@ class InstanceRegistry
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
             ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command'])));
+            if ($ownerId !== null) {
+                DB::table('omcp_jobs')->where('id', $job)->update([
+                    'requester_id' => $ownerId, 'instance_id' => $id, 'control_grant_id' => $instance->control_grant_id,
+                ]);
+            }
             if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property'], true)) {
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
             }
@@ -131,7 +146,7 @@ class InstanceRegistry
     public function forOwner(int $ownerId)
     {
         return DB::table('omcp_instances')->where('owner_id', $ownerId)->whereNull('retired_at')
-            ->select(['id', 'name', 'software', 'version', 'port', 'memory_mib', 'disk_mib'])
+            ->select(['id', 'name', 'software', 'version', 'port', 'memory_mib', 'disk_mib', 'runtime', 'control_owner_id', 'control_grant_id', 'retirement_job_id'])
             ->orderBy('name')->orderBy('id')->paginate(25);
     }
 }

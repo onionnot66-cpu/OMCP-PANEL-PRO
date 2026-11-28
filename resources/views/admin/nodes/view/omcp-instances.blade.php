@@ -96,6 +96,14 @@
                                         <span class="input-group-btn"><button type="button" class="btn btn-primary btn-sm omcpInstanceAction" data-action="command" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">Send</button></span>
                                     </div>
                                     @endif
+                                    @if (in_array($instance->runtime, ['docker', 'podman'], true) && $instance->owner_id && !$instance->retirement_job_id)
+                                    <form method="POST" action="{{ route('admin.nodes.omcp.instances.controls', [$node->id, $instance->id]) }}" onsubmit="return confirm('Change trusted owner controls? Only grant access to trusted owners and trusted workloads; console may contain sensitive game data. Revocation cancels queued jobs, not in-flight work.');">
+                                        @csrf
+                                        <input type="hidden" name="enabled" value="{{ $instance->control_grant_id ? 0 : 1 }}">
+                                        <input type="hidden" name="trusted_confirmed" value="1">
+                                        <button type="submit" class="btn btn-default btn-xs">{{ $instance->control_grant_id ? 'Revoke owner controls' : 'Grant trusted owner controls' }}</button>
+                                    </form>
+                                    @endif
                                     @if (in_array($instance->runtime, [null, 'docker', 'podman'], true))
                                     <button type="button" class="btn btn-warning btn-xs omcpInstanceAction" data-action="retire" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ $instance->retirement_job_id ? 'Check / retry retirement' : 'Retire (keep files)' }}</button>
                                     @endif

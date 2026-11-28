@@ -61,6 +61,16 @@ class OmcpInstanceController extends Controller
         return response()->json(['id' => $id], 202)->header('Cache-Control', 'no-store');
     }
 
+    public function controls(Request $request, Node $node, string $instance, \Pterodactyl\Services\Omcp\OwnerControls $controls)
+    {
+        $data = $request->validate(['enabled' => 'required|boolean']);
+        if ($data['enabled']) {
+            abort_unless($request->boolean('trusted_confirmed'), 422, 'Confirm that the owner and workload are trusted.');
+        }
+        $controls->grant($node->id, $instance, (bool) $data['enabled']);
+        return redirect()->route('admin.nodes.omcp.instances', $node->id);
+    }
+
     public function destroy(Node $node, string $instance, InstanceRegistry $registry)
     {
         $registry->release($node->id, $instance);

@@ -19,6 +19,8 @@ use Pterodactyl\Http\Middleware\Api\Client\Server\AuthenticateServerAccess;
 */
 Route::get('/', [Client\ClientController::class, 'index'])->name('api:client.index');
 Route::get('/omcp/instances', [Client\OmcpInstanceController::class, 'index']);
+Route::post('/omcp/instances/{instance}/action', [Client\OmcpInstanceController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1');
+Route::get('/omcp/instances/{instance}/jobs/{job}', [Client\OmcpInstanceController::class, 'result'])->whereUuid('instance')->whereUuid('job');
 Route::get('/permissions', [Client\ClientController::class, 'permissions']);
 
 Route::prefix('/account')->middleware(AccountSubject::class)->group(function () {
