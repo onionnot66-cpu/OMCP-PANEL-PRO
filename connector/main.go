@@ -93,10 +93,13 @@ func run() error {
  fleetRoot:=flag.String("trusted-fleet-root","","private directory for locally authorized instances")
  fleetManifest:=flag.String("trusted-fleet-manifest","","private JSON allowlist of instance IDs, ports and heap budgets")
  fleetBudget:=flag.Int("trusted-fleet-memory",0,"total permitted Java heap MiB")
+ selectedRuntime:=flag.String("runtime","","none, native, podman, or docker (rootless engines only)")
+ imageID:=flag.String("fleet-image","","approved local image ID for the selected container runtime")
  fleetImage:=flag.String("fleet-podman-image","","optional approved local rootless Podman image ID (sha256:...)")
  fleetCPUs:=flag.Int("fleet-podman-cpus",2,"container CPU limit per instance")
  allowFiles:=flag.Bool("allow-fleet-files",false,"enable bounded offline admin text file operations")
  flag.Parse()
+ backend,err:=selectRuntime(*selectedRuntime,*trustedDir!="",*fleetRoot!="",*fleetImage,*imageID);if err!=nil{return err}
  if *allowFiles && *fleetRoot==""{return errors.New("file manager requires trusted fleet mode")}
  if *fleetImage!="" && *fleetRoot==""{return errors.New("Podman requires trusted fleet mode")}
  if (*fleetRoot=="")!=(*fleetManifest=="") || (*fleetRoot!="" && *trustedDir!=""){return errors.New("choose single native mode or a complete fleet configuration")}
@@ -119,10 +122,7 @@ func run() error {
   if err := save(*path,c); err != nil { return fmt.Errorf("enrollment consumed; rotate token before retry: %w",err) }
   fmt.Println("Enrollment saved.")
  } else {
-  info, err := os.Lstat(*path)
-  if err != nil { return err }
-  if !info.Mode().IsRegular() || info.Mode().Perm()&0077!=0 { return errors.New("config must be a private regular file") }
-  b, err := os.ReadFile(*path)
+  b, err := readPrivateFile(*path,65536)
   if err != nil { return err }
   if err := json.Unmarshal(b,&c); err != nil { return err }
  }
@@ -134,6 +134,7 @@ func run() error {
   if err!=nil{return err}
   native.allowConsole=*allowConsole
   defer native.close()
+  if err=outsideGameDir(native.dir,*path);err!=nil{return err}
  }
  var multi *fleet
  if *fleetRoot!=""{
@@ -142,7 +143,15 @@ func run() error {
   defer multi.close()
   multi.allowFiles=*allowFiles
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
-  if *fleetImage!=""{if err=multi.enableContainers(*fleetImage,*fleetCPUs,*fleetBudget);err!=nil{return err}}
+  for _,s:=range multi.servers{
+   if err=outsideGameDir(s.dir,*path);err!=nil{return err}
+   if err=outsideGameDir(s.dir,*fleetManifest);err!=nil{return err}
+  }
+  if backend=="podman" || backend=="docker"{
+   image:=*imageID;if image==""{image=*fleetImage}
+   if err=multi.enableContainers(backend,image,*fleetCPUs,*fleetBudget);err!=nil{return err}
+  }
+  if err=bindFleetRuntime(multi.root,backend,*selectedRuntime!="" || *fleetImage!="");err!=nil{return err}
  }
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM)
  defer cancel()

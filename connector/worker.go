@@ -36,6 +36,13 @@ func serveConnector(ctx context.Context, c config, native *supervisor, multi *fl
 		caps["native_provision"] = native != nil && native.provision
 		caps["native_console_input"] = native != nil && native.allowConsole
 		payload := map[string]any{"node_id": c.Node, "capabilities": caps}
+		runtimeName := "none"
+		if native != nil {
+			runtimeName = "native"
+		} else if multi != nil {
+			runtimeName = multi.backend
+		}
+		payload["runtime"] = runtimeName
 		if native != nil && native.mu.TryLock() {
 			payload["telemetry"] = map[string]any{"console": native.console.snapshot(), "metrics": native.metricReport()}
 			native.mu.Unlock()

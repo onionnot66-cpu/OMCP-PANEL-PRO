@@ -37,6 +37,7 @@ class ConnectionController extends Controller
         $token = $this->token($request);
         $data = $request->validate([
             'node_id' => 'required|integer|min:1',
+            'runtime' => 'sometimes|in:none,native,podman,docker',
             'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision,fleet_files',
             'capabilities.os' => 'required|string|max:32',
             'capabilities.arch' => 'required|string|max:32',
@@ -72,7 +73,7 @@ class ConnectionController extends Controller
             $query->update([
                 'last_seen_at' => now(),
                 'telemetry' => !empty($data['capabilities']['native_enabled']) && isset($data['telemetry']) ? json_encode($data['telemetry'], JSON_THROW_ON_ERROR) : null,
-                'capabilities' => json_encode($data['capabilities'], JSON_THROW_ON_ERROR),
+                'capabilities' => json_encode($data['capabilities'] + array_intersect_key($data, ['runtime' => true]), JSON_THROW_ON_ERROR),
                 'updated_at' => now(),
             ]);
             return true;

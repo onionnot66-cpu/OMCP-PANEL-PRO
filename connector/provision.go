@@ -12,6 +12,7 @@ import (
 )
 
 type jobPayload struct {
+ Runtime string `json:"runtime"`
  Software string `json:"software"`
  Version string `json:"version"`
  Port int `json:"port"`
@@ -54,8 +55,8 @@ func(s *supervisor) metricReport()map[string]any{
   report["filesystem_available_bytes"]=uint64(fs.Bavail)*uint64(fs.Bsize)
   report["filesystem_capacity_bytes"]=uint64(fs.Blocks)*uint64(fs.Bsize)
  }
- if s.container!=nil{report["runtime"]="podman";report["container_memory_limit_mib"]=s.container.memory;report["container_cpu_limit"]=s.container.cpus}
- if running && s.container==nil{
+ s.backend.reportLimits(report)
+ if running && s.backend.name()=="native"{
   data,err:=os.ReadFile(fmt.Sprintf("/proc/%d/status",s.cmd.Process.Pid))
   if err==nil{
    for _,line:=range strings.Split(string(data),"\n"){
@@ -66,7 +67,7 @@ func(s *supervisor) metricReport()map[string]any{
    }
   }
  }
- if s.container==nil{if cpu,ok:=s.cpuPercent();ok{report["cpu_host_percent"]=cpu}}
+ if s.backend.name()=="native"{if cpu,ok:=s.cpuPercent();ok{report["cpu_host_percent"]=cpu}}
  return report
 }
 

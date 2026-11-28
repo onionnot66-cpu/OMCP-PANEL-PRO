@@ -121,7 +121,7 @@
     let jobPending = false;
     function refreshOmcp() {
         $.getJSON('{{ route('admin.nodes.omcp.status', $node->id) }}').done(function (data) {
-            omcpStatus.text(data.online ? 'Online — last heartbeat: ' + data.last_seen_at :
+            omcpStatus.text(data.online ? 'Online — last heartbeat: ' + data.last_seen_at + (data.capabilities && data.capabilities.runtime ? ' · Runtime: ' + data.capabilities.runtime : '') :
                 (data.registered ? 'Offline' : 'Not registered'));
             consoleAllowed = !!(data.online && data.capabilities && data.capabilities.native_console_input);
             $('#omcpSendCommand').prop('disabled', jobPending || !consoleAllowed);

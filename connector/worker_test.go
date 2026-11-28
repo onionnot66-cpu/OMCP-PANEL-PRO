@@ -62,7 +62,7 @@ func TestHeartbeatAndRenewalDuringWorkWithLostAcknowledgement(t *testing.T) {
 	defer func() { client = old }()
 	stopCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	native := &supervisor{dir: t.TempDir(), memory: 128}
+	native := &supervisor{backend:nativeRuntime{},dir: t.TempDir(), memory: 128}
 	workerDone := make(chan error, 1)
 	go func() {
 		workerDone <- serveConnector(stopCtx, config{Panel: s.URL, Node: 1, Credential: "private"}, native, nil, 20*time.Millisecond, func(jobCtx context.Context, _ job) (bool, string) {

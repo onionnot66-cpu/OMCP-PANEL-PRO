@@ -74,7 +74,7 @@ func replaceGameFile(root *os.File,name string,b []byte)error{
 func(s *supervisor) fileJob(j job)(bool,string){
  if !s.allowFiles{return false,"local file manager opt-in required"}
  if s.running(){return false,"stop the instance before file operations"}
- if s.container!=nil{if err:=s.container.requireAbsent();err!=nil{return false,err.Error()}}
+ if err:=s.backend.requireAbsent();err!=nil{return false,err.Error()}
  root,err:=openGameRoot(s.dir)
  if err!=nil{return false,err.Error()}
  defer root.Close()

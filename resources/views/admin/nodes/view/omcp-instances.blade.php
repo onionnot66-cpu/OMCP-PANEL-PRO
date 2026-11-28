@@ -30,6 +30,15 @@
                 <div class="box-body">
                     <div class="form-group"><label for="name">Server name</label><input id="name" name="name" class="form-control" required maxlength="100" value="{{ old('name') }}"></div>
                     <div class="form-group"><label for="owner_id">Owner user ID</label><input id="owner_id" name="owner_id" type="number" class="form-control" min="1" required value="{{ old('owner_id') }}"></div>
+                    <div class="form-group">
+                        <label for="runtime">Required connector runtime</label>
+                        <select id="runtime" name="runtime" class="form-control" required>
+                            <option value="">Choose a runtime</option>
+                            @foreach (['native' => 'Trusted native Java', 'podman' => 'Rootless Podman', 'docker' => 'Rootless Docker'] as $id => $label)
+                                <option value="{{ $id }}" @selected(old('runtime') === $id)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="form-group"><label for="software">Software</label><select id="software" name="software" class="form-control">@foreach (['paper', 'purpur', 'vanilla'] as $software)<option value="{{ $software }}" @selected(old('software', 'paper') === $software)>{{ ucfirst($software) }}</option>@endforeach</select></div>
                     <div class="form-group"><label for="version">Exact version</label><input id="version" name="version" class="form-control" placeholder="1.21.4" maxlength="32" required value="{{ old('version') }}"></div>
                     <div class="form-group"><label for="port">Reserved TCP port</label><input id="port" name="port" type="number" min="1024" max="65535" class="form-control" required value="{{ old('port', 25565) }}"></div>
@@ -61,7 +70,7 @@
                             <tr>
                                 <td>{{ $instance->name }}<br><small>{{ $instance->id }}</small></td>
                                 <td>{{ $instance->owner_id ?? 'Unassigned' }}</td>
-                                <td>{{ ucfirst($instance->software) }} {{ $instance->version }}</td>
+                                <td>{{ ucfirst($instance->software) }} {{ $instance->version }}<br><small>{{ $instance->runtime ?? 'Legacy runtime selection' }}</small></td>
                                 <td>{{ $instance->port }}</td><td>{{ $instance->memory_mib }} MiB</td><td>{{ $instance->disk_mib }} MiB</td>
                                 <td>{{ $instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved' }}</td>
                                 <td>

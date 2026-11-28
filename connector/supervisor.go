@@ -4,7 +4,6 @@ import (
  "context"
  "sync"
  "errors"
- "fmt"
  "io"
  "os"
  "os/exec"
@@ -27,7 +26,7 @@ type supervisor struct {
  allowConsole bool
  allowFiles bool
  cpu cpuSample
- container *containerRuntime
+ backend processRuntime
 }
 
 func newSupervisor(dir string,memory int)(*supervisor,error){return openSupervisor(dir,memory,false)}
@@ -55,7 +54,7 @@ func openSupervisor(dir string,memory int,provision bool)(*supervisor,error){
  lock,err:=os.OpenFile(filepath.Join(lockdir,"native.lock"),os.O_CREATE|os.O_RDWR,0600)
  if err!=nil{return nil,err}
  if err=syscall.Flock(int(lock.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{lock.Close();return nil,errors.New("another native supervisor is active")}
- return &supervisor{dir:resolved,memory:memory,lock:lock,provision:provision},nil
+ return &supervisor{backend:nativeRuntime{},dir:resolved,memory:memory,lock:lock,provision:provision},nil
 }
 
 func(s *supervisor) running()bool{
@@ -71,18 +70,10 @@ func(s *supervisor) start()error{
  jar:=filepath.Join(s.dir,"server.jar")
  info,err:=os.Lstat(jar)
  if err!=nil || !info.Mode().IsRegular(){return errors.New("trusted server.jar missing")}
- var cmd *exec.Cmd
- if s.container!=nil{
-  if err:=s.container.requireAbsent();err!=nil{return err}
-  cmd=exec.Command(s.container.binary,s.container.args(s.dir,s.memory)...)
-  // Podman needs the local rootless runtime environment; only HOME is passed into the container explicitly.
- }else{
-  java,err:=exec.LookPath("java")
-  if err!=nil{return err}
-  cmd=exec.Command(java,fmt.Sprintf("-Xmx%dM",s.memory),"-jar","server.jar","nogui")
-  cmd.Dir=s.dir
-  cmd.Env=[]string{"PATH=/usr/local/bin:/usr/bin:/bin","HOME="+s.dir,"LANG=C.UTF-8"}
- }
+ if s.backend==nil{return errors.New("runtime not configured")}
+ if err:=s.backend.requireAbsent();err!=nil{return err}
+ cmd,err:=s.backend.command(s.dir,s.memory)
+ if err!=nil{return err}
  cmd.SysProcAttr=&syscall.SysProcAttr{Pdeathsig:syscall.SIGKILL}
  s.console.reset()
  s.cpu=cpuSample{}
@@ -98,20 +89,20 @@ func(s *supervisor) start()error{
 }
 
 func(s *supervisor) stop(force bool)error{
- if !s.running(){if s.container!=nil{return s.container.requireAbsent()};return nil}
+ if !s.running(){return s.backend.requireAbsent()}
  if !force{
   // Do not block indefinitely if the Java process stops consuming stdin.
   input:=s.input
   go func(){_,_=io.WriteString(input,"stop\n");_=input.Close()}()
   select{
-  case <-s.done:s.cmd=nil;s.input=nil;if s.container!=nil{return s.container.requireAbsent()};return nil
+  case <-s.done:s.cmd=nil;s.input=nil;return s.backend.requireAbsent()
   case <-time.After(25*time.Second):
   }
  }
- if s.container!=nil{if err:=s.container.kill();err!=nil{return err}}
+ if err:=s.backend.kill();err!=nil{return err}
  if err:=s.cmd.Process.Kill();err!=nil && !errors.Is(err,os.ErrProcessDone){return err}
  select{
- case <-s.done:s.cmd=nil;s.input=nil;return nil
+ case <-s.done:s.cmd=nil;s.input=nil;return s.backend.requireAbsent()
  case <-time.After(5*time.Second):return errors.New("process exit not confirmed")
  }
 }
@@ -130,7 +121,7 @@ func(s *supervisor) execute(ctx context.Context, action string)(bool,string){
  default:return false,"unsupported native action"
  }
  if err!=nil{return false,err.Error()}
- if s.running(){if s.container!=nil{return true,"container attachment running (game readiness not verified)"};return true,"process running (game readiness not verified)"}
- if s.container!=nil{if err:=s.container.requireAbsent();err!=nil{return false,err.Error()}}
+ if s.running(){if s.backend.name()!="native"{return true,"container attachment running (game readiness not verified)"};return true,"process running (game readiness not verified)"}
+ if err:=s.backend.requireAbsent();err!=nil{return false,err.Error()}
  return true,"process stopped"
 }

@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'connector/**'
+      - 'tests/Smoke/rootless-fleet.sh'
+      - 'tests/Smoke/runtime-probe/**'
       - 'omcp-connect-install.sh'
       - '.github/workflows/omcp-connect.yml'
   workflow_dispatch:
@@ -32,3 +34,27 @@ jobs:
         with:
           name: omcp-connect-linux
           path: connector/dist/
+  rootless-fleet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [podman, docker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+      - name: Prepare the runner user service manager
+        run: |
+          sudo loginctl enable-linger "$USER"
+          sudo systemctl start "user@$(id -u).service"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+      - name: Start rootless Docker
+        if: matrix.engine == 'docker'
+        run: dockerd-rootless-setuptool.sh install --force
+      - name: Exercise two isolated fixture processes
+        run: systemd-run --user --scope -p Delegate=yes env PATH="$PATH" bash tests/Smoke/rootless-fleet.sh "${{ matrix.engine }}"

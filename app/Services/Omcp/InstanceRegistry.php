@@ -15,6 +15,7 @@ class InstanceRegistry
         $data = Validator::make($input, [
             'owner_id' => 'required|integer|exists:users,id',
             'name' => 'required|string|max:100',
+            'runtime' => 'sometimes|in:native,podman,docker',
             'software' => 'required|in:vanilla,paper,purpur',
             'version' => ['required', 'string', 'max:32', 'regex:/\A[0-9]+(\.[0-9]+){1,3}\z/'],
             'port' => 'required|integer|min:1024|max:65535',
@@ -61,8 +62,17 @@ class InstanceRegistry
             $instance = DB::table('omcp_instances')->where('node_id', $nodeId)->where('id', $id)->lockForUpdate()->first();
             abort_unless($instance, 404);
             abort_if(DB::table('allocations')->where('node_id', $nodeId)->where('port', $instance->port)->exists(), 409, 'Legacy allocation conflicts with instance port.');
+            $capabilities = json_decode(DB::table('omcp_connections')->where('node_id', $nodeId)->lockForUpdate()->value('capabilities') ?? '{}', true);
+            $backend = $capabilities['runtime'] ?? null;
+            if ($instance->runtime !== null) {
+                abort_unless($backend === $instance->runtime, 409, 'The connector runtime differs from this reservation.');
+            } elseif (in_array($backend, ['native', 'podman', 'docker'], true)) {
+                // Adopt legacy reservations only after an operator-selected connector identifies its backend.
+                DB::table('omcp_instances')->where('id', $id)->update(['runtime' => $backend]);
+            }
             $job = $jobs->enqueue($nodeId, 'instance.' . $action, [
                 'instance_id' => $instance->id,
+                'runtime' => $backend,
                 'software' => $instance->software,
                 'version' => $instance->version,
                 'port' => (int) $instance->port,

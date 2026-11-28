@@ -21,6 +21,9 @@ type fleetEntry struct{
  Port int `json:"port"`
 }
 type fleet struct{
+ root string
+ engine engineCLI
+ backend string
  allowFiles bool
  provision bool
  lock *os.File
@@ -39,33 +42,32 @@ func validateFleet(entries []fleetEntry,budget int)error{
 }
 func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,error){
  if os.Geteuid()==0{return nil,errors.New("trusted fleet must run non-root")}
- info,err:=os.Lstat(manifest)
- if err!=nil||!info.Mode().IsRegular()||info.Mode().Perm()&0077!=0||info.Size()>65536{return nil,errors.New("fleet manifest must be a private regular file")}
- b,err:=os.ReadFile(manifest);if err!=nil{return nil,err}
+ b,err:=readPrivateFile(manifest,65536);if err!=nil{return nil,err}
  var entries []fleetEntry
  if err=json.Unmarshal(b,&entries);err!=nil{return nil,err}
  if err=validateFleet(entries,budget);err!=nil{return nil,err}
  root,err=filepath.EvalSymlinks(root);if err!=nil{return nil,err}
  root,err=filepath.Abs(root);if err!=nil{return nil,err}
- info,err=os.Stat(root)
+ info,err:=os.Stat(root)
  if err!=nil||!info.IsDir()||info.Mode().Perm()&0077!=0{return nil,errors.New("fleet root must be a private directory")}
  home,err:=os.UserHomeDir();if err!=nil{return nil,err}
  lockdir:=filepath.Join(home,".omcp-connect")
  if err=os.MkdirAll(lockdir,0700);err!=nil{return nil,err}
  lock,err:=os.OpenFile(filepath.Join(lockdir,"native.lock"),os.O_CREATE|os.O_RDWR,0600);if err!=nil{return nil,err}
  if err=syscall.Flock(int(lock.Fd()),syscall.LOCK_EX|syscall.LOCK_NB);err!=nil{lock.Close();return nil,errors.New("another native supervisor is active")}
- f:=&fleet{provision:provision,lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
+ f:=&fleet{root:root,backend:"native",provision:provision,lock:lock,servers:map[string]*supervisor{},ports:map[string]int{}}
  for _,e:=range entries{
   dir:=filepath.Join(root,e.ID)
   info,err:=os.Lstat(dir)
   if err!=nil&&!os.IsNotExist(err){f.close();return nil,err}
   if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){f.close();return nil,errors.New("instance directory must be private and not a symlink")}
-  f.servers[e.ID]=&supervisor{dir:dir,memory:e.Memory,provision:provision,allowConsole:console}
+  f.servers[e.ID]=&supervisor{backend:nativeRuntime{},dir:dir,memory:e.Memory,provision:provision,allowConsole:console}
   f.ports[e.ID]=e.Port
  }
  return f,nil
 }
 func(f *fleet) execute(ctx context.Context,j job)(bool,string){
+ if j.Payload.Runtime!="" && j.Payload.Runtime!=f.backend{return false,"reserved runtime differs from local fleet backend"}
  s,ok:=f.servers[j.Payload.InstanceID];if !ok{return false,"instance is not locally authorized"}
  if j.Payload.Memory!=s.memory||j.Payload.Port!=f.ports[j.Payload.InstanceID]{return false,"reservation does not match local memory/port manifest"}
  info,err:=os.Lstat(s.dir)
@@ -89,6 +91,7 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
 }
 func(f *fleet) close(){
  for _,s:=range f.servers{if err:=s.stop(false);err!=nil{fmt.Fprintln(os.Stderr,"instance stop:",err)}}
+ f.engine.close()
  _=f.lock.Close()
 }
 
@@ -105,15 +108,17 @@ func matchesFleetPort(data string,port int)bool{
  return found
 }
 
-func(f *fleet) enableContainers(image string,cpus,budget int)error{
- binary,err:=checkContainerRuntime(image,cpus)
+func(f *fleet) enableContainers(engine,image string,cpus,budget int)error{
+ runner,err:=checkContainerRuntime(engine,image,cpus)
  if err!=nil{return err}
+ f.engine=runner
  var total int64
  for _,s:=range f.servers{total+=int64(s.memory)+512}
  if total>int64(budget){return errors.New("fleet container budget must include 512 MiB overhead per server")}
+ f.backend=engine
  for id,s:=range f.servers{
   if strings.ContainsAny(s.dir,":,\n\r"){return errors.New("unsupported bind mount path")}
-  s.container=&containerRuntime{binary:binary,image:image,name:"omcp-"+id,port:f.ports[id],memory:s.memory+512,cpus:cpus}
+  s.backend=&containerRuntime{engineCLI:runner,image:image,containerName:"omcp-"+id,port:f.ports[id],memory:s.memory+512,cpus:cpus}
  }
  return nil
 }

@@ -7,7 +7,7 @@ import (
 
 func TestContainerArguments(t *testing.T){
  image:="sha256:"+strings.Repeat("a",64)
- r:=containerRuntime{image:image,name:"omcp-test",port:25566,memory:1536,cpus:2}
+ r:=containerRuntime{engineCLI:engineCLI{engine:"podman"},image:image,containerName:"omcp-test",port:25566,memory:1536,cpus:2}
  args:=strings.Join(r.args("/private/server",1024)," ")
  for _,required:=range []string{"--pull=never","--userns=keep-id","--cap-drop=ALL","--security-opt=no-new-privileges","--read-only","--http-proxy=false","--memory 1536m","--memory-swap 1664m","--cpus 2","--pids-limit=512","--publish 25566:25566/tcp","--volume /private/server:/server:rw,Z",image,"-Xmx1024M"}{
   if !strings.Contains(args,required){t.Errorf("missing %s",required)}

@@ -88,4 +88,25 @@ class InstanceRegistryTest extends OmcpIntegrationTestCase
         $this->expectExceptionMessage('Configured node RAM budget exceeded.');
         $registry->reserve($node->id, $this->input($owner, 25567));
     }
+
+    public function testRuntimeBoundReservationRejectsDowngradeAndOldConnectors(): void
+    {
+        $node = $this->node();
+        $registry = app(InstanceRegistry::class);
+        $id = $registry->reserve($node->id, $this->input(User::factory()->create()) + ['runtime' => 'podman']);
+        $connection = DB::table('omcp_connections')->where('node_id', $node->id);
+        foreach ([null, 'native', 'docker', 'podman'] as $reported) {
+            $connection->update(['last_seen_at' => now(), 'capabilities' => json_encode(['fleet_enabled' => true, 'runtime' => $reported])]);
+            try {
+                $job = $registry->dispatch($node->id, $id, 'start', false, app(\Pterodactyl\Services\Omcp\JobService::class));
+                $this->assertSame('podman', $reported);
+                $payload = json_decode(DB::table('omcp_jobs')->where('id', $job)->value('payload'), true);
+                $this->assertSame('podman', $payload['runtime']);
+            } catch (HttpException $e) {
+                $this->assertNotSame('podman', $reported);
+                $this->assertSame(409, $e->getStatusCode());
+                $this->assertDatabaseCount('omcp_jobs', 0);
+            }
+        }
+    }
 }

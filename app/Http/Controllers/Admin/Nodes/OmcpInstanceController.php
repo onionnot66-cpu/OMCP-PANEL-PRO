@@ -18,7 +18,7 @@ class OmcpInstanceController extends Controller
 
     public function store(Request $request, Node $node, InstanceRegistry $registry)
     {
-        $registry->reserve($node->id, $request->only(['owner_id', 'name', 'software', 'version', 'port', 'memory_mib', 'disk_mib']));
+        $registry->reserve($node->id, $request->only(['owner_id', 'name', 'runtime', 'software', 'version', 'port', 'memory_mib', 'disk_mib']));
         return redirect()->route('admin.nodes.omcp.instances', $node->id);
     }
 
