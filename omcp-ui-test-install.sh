@@ -3,12 +3,12 @@ set -Eeuo pipefail
 umask 077
 
 # Fresh loopback-only UI installation, pinned to a successful panel smoke build.
-revision=c3b252101c3d647c7a87b64cd245c46d5cd860f0
+revision=1aecef3a9323c2985b1fdc9b1203ec200b60d501
 repo=https://github.com/onionnot66-cpu/OMCP-PANEL-PRO.git
 dest="$HOME/omcp-ui-test"
 mode=""
 assets=""
-assets_digest=842a4815c4f187d3ab3d883a70dbef341d491a2ed96e2ff0fc081559c2100959
+assets_digest=d390658acee74a10cdef53f2d3e9854caa5bc5f699503a8f760b84c687d90416
 usage() {
     echo 'Usage: bash omcp-ui-test-install.sh [--check|--auto-db] [--assets /path/to/omcp-panel-assets.zip]' >&2
     exit 2
@@ -45,7 +45,7 @@ preflight() {
             echo 'Asset ZIP must be a readable regular file.'; failed=1
         elif command -v sha256sum >/dev/null; then
             if [[ "$(sha256sum < "$assets" | cut -d ' ' -f 1)" != "$assets_digest" ]]; then
-                echo 'Asset archive checksum mismatch. Download the artifact from run 46166138091.'; failed=1
+                echo 'Asset archive checksum mismatch. Download the artifact from run 46172256214.'; failed=1
             else
                 echo 'Verified pinned CI asset archive; Node/Yarn build will be skipped.'
             fi
