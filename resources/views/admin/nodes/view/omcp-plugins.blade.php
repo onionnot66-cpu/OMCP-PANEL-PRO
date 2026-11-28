@@ -11,14 +11,16 @@
 
 @section('content')
 <div class="callout callout-warning">
-    <h4>Trusted admin-only Modrinth management</h4>
-    <p>{{ ucfirst($instance->software) }} {{ $instance->version }} · {{ $instance->runtime }}. Stop the server first. Enable --allow-fleet-plugins locally. Only compatible stable versions with verified SHA-512 and no required/incompatible dependencies are installable. Review the publisher, license and plugin code before trusting a JAR. Existing JARs will not be overwritten. Data directories are retained on deletion.</p>
+    <h4>Trusted admin-only plugin management</h4>
+    <p>{{ ucfirst($instance->software) }} {{ $instance->version }} · {{ $instance->runtime }}. Stop the server first. Enable --allow-fleet-plugins locally. Only compatible stable versions with verified SHA-512 (Modrinth) or SHA-256 (Hangar) and no required/incompatible dependencies are installable. Review the publisher, license and plugin code before trusting a JAR. Existing JARs will not be overwritten. Data directories are retained on deletion.</p>
 </div>
 <div class="row">
     <div class="col-md-6">
         <div class="box box-primary">
-            <div class="box-header with-border"><h3 class="box-title">Modrinth catalog</h3></div>
+            <div class="box-header with-border"><h3 class="box-title">Modrinth catalog / Hangar</h3></div>
             <div class="box-body">
+                <label for="pluginProvider">Plugin provider</label>
+                <select id="pluginProvider" class="form-control" style="margin-bottom:12px"><option value="modrinth">Modrinth</option><option value="hangar">Hangar</option></select>
                 <div class="input-group"><input id="pluginQuery" maxlength="100" class="form-control" placeholder="Search plugins" aria-label="Plugin search"><span class="input-group-btn"><button id="pluginSearch" class="btn btn-primary" type="button">Search</button></span></div>
                 <p id="pluginCatalogStatus" role="status"></p>
                 <div id="pluginResults"></div>
@@ -51,6 +53,7 @@
     const resultUrl = '{{ route('admin.nodes.omcp.diagnostic.result', [$node->id, 'JOB_ID']) }}';
     const catalogStatus = $('#pluginCatalogStatus'), status = $('#pluginJobStatus');
     let project = null, versions = [], busy = false;
+    const provider = () => $('#pluginProvider').val();
     function selected() { return versions.find(v => v.id === $('#pluginVersions').val()); }
     function refreshControls() {
         $('#pluginInstall').prop('disabled', busy || !selected());
@@ -58,16 +61,17 @@
     }
     function showVersion() {
         const v = selected();
-        $('#pluginDetails').text(v ? v.filename + ' | ' + v.size + ' bytes | SHA-512: ' + v.sha512 : '');
+        $('#pluginDetails').text(v ? v.filename + ' | ' + v.size + ' bytes | ' + (v.sha256 ? 'SHA-256: ' + v.sha256 : 'SHA-512: ' + v.sha512) : '');
         refreshControls();
     }
     function loadVersions(id) {
+        const source = provider();
         project = id; versions = [];
         $('#pluginVersions').empty().prop('disabled', true);
         showVersion();
         catalogStatus.text('Loading compatible releases...');
-        $.getJSON(catalogUrl, {project:id}).done(function (data) {
-            if (project !== id) return;
+        $.getJSON(catalogUrl, {project:id,provider:source}).done(function (data) {
+            if (project !== id || provider() !== source) return;
             versions = data;
             data.forEach(v => $('<option>').val(v.id).text(v.version + ' — ' + v.filename).appendTo('#pluginVersions'));
             $('#pluginVersions').prop('disabled', !data.length);
@@ -76,17 +80,20 @@
         }).fail(function () { if (project === id) catalogStatus.text('Version lookup failed.'); });
     }
     $('#pluginVersions').on('change', showVersion);
+    $('#pluginProvider').on('change', () => { project=null; versions=[]; $('#pluginResults, #pluginVersions').empty(); $('#pluginVersions').prop('disabled',true); showVersion(); });
     $('#pluginSearch').on('click', function () {
+        const source = provider();
         const button = $(this).prop('disabled', true);
         project = null; versions = []; $('#pluginVersions').empty().prop('disabled', true); showVersion();
         $('#pluginResults').empty(); catalogStatus.text('Searching...');
-        $.getJSON(catalogUrl, {query:$('#pluginQuery').val()}).done(function (data) {
+        $.getJSON(catalogUrl, {query:$('#pluginQuery').val(),provider:source}).done(function (data) {
+            if (provider() !== source) return;
             data.forEach(p => {
                 const row = $('<div>').addClass('well well-sm');
                 $('<strong>').text(p.title).appendTo(row);
                 $('<p>').text(p.description).appendTo(row);
                 $('<small>').text(p.author + ' · ' + p.license + ' · ' + p.downloads + ' downloads').appendTo(row);
-                $('<a>').attr({href:'https://modrinth.com/plugin/' + encodeURIComponent(p.id),target:'_blank',rel:'noopener noreferrer'}).text(' Review source page ').appendTo(row);
+                $('<a>').attr({href:source==='hangar' && /^https:\/\/hangar\.papermc\.io\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(p.source_url) ? p.source_url : 'https://modrinth.com/plugin/' + encodeURIComponent(p.id),target:'_blank',rel:'noopener noreferrer'}).text(' Review source page ').appendTo(row);
                 $('<button type="button">').addClass('btn btn-default btn-xs').text('Versions').on('click', () => loadVersions(p.id)).appendTo(row);
                 row.appendTo('#pluginResults');
             });
@@ -97,11 +104,12 @@
         const area = $('#pluginInventory').empty();
         if (!names.length) { area.text('No managed plugins.'); return; }
         names.forEach(name => {
-            const m = /^omcp-([A-Za-z0-9]{3,32})-([A-Za-z0-9]{3,32})\.jar(\.disabled)?$/.exec(name);
+            const hangar = /^omcp-hangar-([1-9][0-9]{0,18})-([1-9][0-9]{0,18})\.jar(\.disabled)?$/.exec(name);
+            const m = hangar || /^omcp-([A-Za-z0-9]{3,32})-([A-Za-z0-9]{3,32})\.jar(\.disabled)?$/.exec(name);
             if (!m) return;
             const row = $('<div>').addClass('well well-sm');
             $('<p>').text(name).appendTo(row);
-            const body = {plugin_project:m[1],plugin_version:m[2],plugin_disabled:m[3] ? 1 : 0,confirmed:1};
+            const body = {plugin_provider:hangar?'hangar':'modrinth',plugin_project:m[1],plugin_version:m[2],plugin_disabled:m[3] ? 1 : 0,confirmed:1};
             $('<button type="button">').addClass('btn btn-default btn-xs pluginMutation').text(m[3] ? 'Enable' : 'Disable').on('click', () => {
                 if (window.confirm('Change this managed plugin?')) submit({...body,action:m[3] ? 'plugin_enable' : 'plugin_disable'});
             }).appendTo(row);
@@ -136,7 +144,7 @@
     $('#pluginInstall').on('click', () => {
         const v = selected();
         if (v && project && window.confirm('Install this exact verified release from a trusted publisher? A plugin is executable code.')) {
-            submit({action:'plugin_install',plugin_project:project,plugin_version:v.id,plugin_sha512:v.sha512,confirmed:1});
+            submit({action:'plugin_install',plugin_provider:provider(),plugin_project:project,plugin_version:v.id,...(v.sha256?{plugin_sha256:v.sha256}:{plugin_sha512:v.sha512}),confirmed:1});
         }
     });
 })();

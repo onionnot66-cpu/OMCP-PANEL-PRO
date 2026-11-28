@@ -18,6 +18,8 @@ type jobPayload struct {
  BackupSHA256 string `json:"backup_sha256"`
  TransferSHA256 string `json:"transfer_sha256"`
  TransferBytes int64 `json:"transfer_bytes"`
+ PluginProvider string `json:"plugin_provider"`
+ PluginSHA256 string `json:"plugin_sha256"`
  PluginProject string `json:"plugin_project"`
  PluginVersion string `json:"plugin_version"`
  PluginSHA512 string `json:"plugin_sha512"`

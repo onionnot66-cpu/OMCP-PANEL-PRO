@@ -4,6 +4,8 @@ import (
  "archive/zip"
  "context"
  "crypto/sha512"
+ "crypto/sha256"
+ "hash"
  "encoding/hex"
  "encoding/json"
  "errors"
@@ -22,6 +24,7 @@ import (
 const pluginLimit=64*1024*1024
 var pluginID=regexp.MustCompile("^[A-Za-z0-9]{3,32}$")
 var managedPlugin=regexp.MustCompile("^omcp-([A-Za-z0-9]{3,32})-([A-Za-z0-9]{3,32})\\.jar(\\.disabled)?$")
+func managedPluginName(name string)bool{return managedPlugin.MatchString(name)||managedHangar.MatchString(name)}
 var pluginHash=regexp.MustCompile("^[0-9a-f]{128}$")
 
 type modrinthFile struct{
@@ -89,11 +92,11 @@ func pluginNames(dir *os.File)([]string,error){
  names,e:=d.Readdirnames(4097);if e!=nil&&e!=io.EOF{return nil,e}
  if len(names)>4096{return nil,errors.New("plugin directory exceeds inspection limit")}
  var out []string
- for _,n:=range names{if managedPlugin.MatchString(n){out=append(out,n)}}
+ for _,n:=range names{if managedPluginName(n){out=append(out,n)}}
  return out,nil
 }
 func safePluginFile(dir *os.File,name string)error{
- if !managedPlugin.MatchString(name){return errors.New("not an OMCP-managed plugin")}
+ if !managedPluginName(name){return errors.New("not an OMCP-managed plugin")}
  fd,e:=syscall.Openat(int(dir.Fd()),name,syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC,0)
  if e!=nil{return e}
  defer syscall.Close(fd)
@@ -110,20 +113,23 @@ func validatePluginJar(path string)error{
 }
 func installPlugin(ctx context.Context,dir *os.File,p jobPayload,src modrinthFile,body io.Reader)error{
  if !pluginID.MatchString(p.PluginProject)||!pluginID.MatchString(p.PluginVersion)||!pluginHash.MatchString(p.PluginSHA512){return errors.New("invalid plugin selection")}
+ prefix:="omcp-"+p.PluginProject+"-"
+ return installPluginArtifact(ctx,dir,prefix,prefix+p.PluginVersion+".jar",src.Size,p.PluginSHA512,sha512.New(),body)
+}
+func installPluginArtifact(ctx context.Context,dir *os.File,prefix,name string,size int64,expected string,h hash.Hash,body io.Reader)error{
+ if !managedPluginName(name)||!strings.HasPrefix(name,prefix)||size<1||size>pluginLimit{return errors.New("invalid plugin artifact")}
  names,e:=pluginNames(dir);if e!=nil{return e}
  if len(names)>=40{return errors.New("managed plugin limit reached")}
- prefix:="omcp-"+p.PluginProject+"-"
  for _,n:=range names{if strings.HasPrefix(n,prefix){return errors.New("managed project already installed; no automatic overwrite")}}
  tmp,e:=os.CreateTemp(fmt.Sprintf("/proc/self/fd/%d",dir.Fd()),".omcp-plugin-");if e!=nil{return e}
  defer os.Remove(tmp.Name())
- h:=sha512.New()
  n,e:=io.Copy(io.MultiWriter(tmp,h),io.LimitReader(body,pluginLimit+1))
  if e==nil{e=tmp.Sync()}
  ce:=tmp.Close();if e!=nil{return e};if ce!=nil{return ce}
- if n!=src.Size||n>pluginLimit||hex.EncodeToString(h.Sum(nil))!=p.PluginSHA512{return errors.New("plugin size or SHA-512 mismatch")}
+ if n!=size||n>pluginLimit||hex.EncodeToString(h.Sum(nil))!=expected{return errors.New("plugin size or checksum mismatch")}
  if e=validatePluginJar(tmp.Name());e!=nil{return e}
  if e=ctx.Err();e!=nil{return e}
- dest:=filepath.Join(fmt.Sprintf("/proc/self/fd/%d",dir.Fd()),prefix+p.PluginVersion+".jar")
+ dest:=filepath.Join(fmt.Sprintf("/proc/self/fd/%d",dir.Fd()),name)
  // Link publishes without overwriting even if the destination appeared since inspection.
  if e=os.Link(tmp.Name(),dest);e!=nil{return e}
  if e=os.Remove(tmp.Name());e!=nil{return e}
@@ -149,11 +155,29 @@ func (f *fleet) pluginJob(ctx context.Context,s *supervisor,j job)(bool,string){
   for _,n:=range names{if e=safePluginFile(dir,n);e!=nil{return false,"unsafe managed plugin entry"};out=append(out,n)}
   b,e:=json.Marshal(out);if e!=nil||len(b)>4096{return false,"plugin inventory too large"};return true,string(b)
  }
- if !pluginID.MatchString(p.PluginProject)||!pluginID.MatchString(p.PluginVersion){return false,"invalid plugin IDs"}
- name:="omcp-"+p.PluginProject+"-"+p.PluginVersion+".jar"
+ provider:=p.PluginProvider
+ if provider==""{provider="modrinth"}
+ prefix:=""
+ switch provider{
+ case "modrinth":
+  if !pluginID.MatchString(p.PluginProject)||!pluginID.MatchString(p.PluginVersion){return false,"invalid Modrinth IDs"}
+  prefix="omcp-"+p.PluginProject+"-"
+ case "hangar":
+  if !hangarID.MatchString(p.PluginProject)||!hangarID.MatchString(p.PluginVersion){return false,"invalid Hangar IDs"}
+  prefix="omcp-hangar-"+p.PluginProject+"-"
+ default:return false,"unsupported provider"
+ }
+ name:=prefix+p.PluginVersion+".jar"
  switch j.Action{
  case "instance.plugin_install":
   ctx,cancel:=context.WithTimeout(ctx,90*time.Second);defer cancel()
+  if provider=="hangar"{
+   v,e:=readHangarVersion(ctx,p);if e!=nil{return false,e.Error()}
+   src,e:=selectHangarFile(v,p);if e!=nil{return false,e.Error()}
+   body,e:=pluginGet(ctx,src.DownloadURL,"hangarcdn.papermc.io");if e!=nil{return false,e.Error()};defer body.Close()
+   if e=installPluginArtifact(ctx,dir,prefix,name,src.FileInfo.Size,p.PluginSHA256,sha256.New(),body);e!=nil{return false,e.Error()}
+   return true,"verified Hangar plugin installed; restart to load"
+  }
   v,e:=readPluginVersion(ctx,p);if e!=nil{return false,e.Error()}
   src,e:=selectPluginFile(v,p);if e!=nil{return false,e.Error()}
   body,e:=pluginGet(ctx,src.URL,"cdn.modrinth.com");if e!=nil{return false,e.Error()};defer body.Close()

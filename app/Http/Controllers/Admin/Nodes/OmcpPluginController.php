@@ -25,10 +25,15 @@ class OmcpPluginController extends Controller
         return view('admin.nodes.view.omcp-plugins', ['node' => $node, 'instance' => $this->instance($node, $instance)]);
     }
 
-    public function catalog(Request $request, Node $node, string $instance, ModrinthCatalog $catalog)
+    public function catalog(Request $request, Node $node, string $instance, ModrinthCatalog $catalog, \Pterodactyl\Services\Omcp\HangarCatalog $hangar)
     {
         $row = $this->instance($node, $instance);
-        $data = $request->validate(['query' => 'nullable|string|max:100', 'project' => ['nullable', 'regex:/\A[A-Za-z0-9]{3,32}\z/']]);
+        $data = $request->validate(['provider' => 'sometimes|in:modrinth,hangar', 'query' => 'nullable|string|max:100', 'project' => ['nullable', 'regex:/\A[A-Za-z0-9]{1,32}\z/']]);
+        $provider = $data['provider'] ?? 'modrinth';
+        $catalog = $provider === 'hangar' ? $hangar : $catalog;
+        if (!empty($data['project']) && $provider === 'hangar') {
+            abort_unless(preg_match('/\A[1-9][0-9]{0,18}\z/', $data['project']), 422);
+        }
         $results = !empty($data['project']) ? $catalog->versions($data['project'], $row->version) : $catalog->search($data['query'] ?? '', $row->version);
         return response()->json($results)->header('Cache-Control', 'no-store');
     }
@@ -40,11 +45,21 @@ class OmcpPluginController extends Controller
             'action' => 'required|in:plugin_list,plugin_install,plugin_enable,plugin_disable,plugin_delete',
             'plugin_project' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{3,32}\z/'],
             'plugin_version' => ['required_unless:action,plugin_list', 'nullable', 'regex:/\A[A-Za-z0-9]{3,32}\z/'],
-            'plugin_sha512' => ['required_if:action,plugin_install', 'nullable', 'regex:/\A[a-f0-9]{128}\z/'],
+            'plugin_provider' => 'sometimes|in:modrinth,hangar',
+            'plugin_sha256' => ['nullable', 'regex:/\A[a-f0-9]{64}\z/'],
+            'plugin_sha512' => ['nullable', 'regex:/\A[a-f0-9]{128}\z/'],
             'plugin_disabled' => 'sometimes|boolean',
         ]);
         if ($data['action'] !== 'plugin_list') {
             abort_unless($request->boolean('confirmed'), 422, 'Explicit trusted plugin change confirmation required.');
+        }
+        $provider = $data['plugin_provider'] ?? 'modrinth';
+        if ($data['action'] !== 'plugin_list') {
+            $pattern = $provider === 'hangar' ? '/\A[1-9][0-9]{0,18}\z/' : '/\A[A-Za-z0-9]{3,32}\z/';
+            abort_unless(preg_match($pattern, $data['plugin_project']) && preg_match($pattern, $data['plugin_version']), 422, 'Invalid provider IDs.');
+        }
+        if ($data['action'] === 'plugin_install') {
+            abort_unless(!empty($data[$provider === 'hangar' ? 'plugin_sha256' : 'plugin_sha512']), 422, 'Provider checksum required.');
         }
         $extra = array_filter($data, static fn ($v) => $v !== null);
         if (isset($extra['plugin_disabled'])) {

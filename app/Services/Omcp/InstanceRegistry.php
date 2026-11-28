@@ -107,7 +107,7 @@ class InstanceRegistry
                 'port' => (int) $instance->port,
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
-            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256', 'transfer_bytes', 'transfer_sha256'])));
+            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_provider', 'plugin_sha256', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256', 'transfer_bytes', 'transfer_sha256'])));
             if ($ownerId !== null) {
                 DB::table('omcp_jobs')->where('id', $job)->update([
                     'requester_id' => $ownerId, 'instance_id' => $id, 'control_grant_id' => $instance->control_grant_id,
