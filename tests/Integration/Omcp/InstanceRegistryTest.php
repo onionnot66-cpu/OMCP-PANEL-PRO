@@ -2,19 +2,15 @@
 
 namespace Pterodactyl\Tests\Integration\Omcp;
 
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Pterodactyl\Models\Location;
 use Pterodactyl\Models\Node;
 use Pterodactyl\Models\User;
 use Pterodactyl\Services\Omcp\InstanceRegistry;
-use Pterodactyl\Tests\Integration\IntegrationTestCase;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class InstanceRegistryTest extends IntegrationTestCase
+class InstanceRegistryTest extends OmcpIntegrationTestCase
 {
-    use DatabaseTransactions;
-
     private function node(): Node
     {
         $node = Node::factory()->create(['location_id' => Location::factory()->create()->id, 'memory' => 2048, 'disk' => 8192]);
