@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 # Development installer; compiles a pinned revision without sudo.
-revision=d524dd655749ad5e4664c3aff4b12d6b9b83e509
+revision=ef03a56fb83fd8c53af04cdb3802866062f11191
 repo=https://github.com/onionnot66-cpu/OMCP-PANEL-PRO.git
 if [[ "$(uname -s)" != Linux ]]; then echo "Linux required." >&2; exit 1; fi
 for cmd in go git mktemp install; do
