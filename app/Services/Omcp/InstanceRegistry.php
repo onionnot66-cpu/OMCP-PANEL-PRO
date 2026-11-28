@@ -52,7 +52,7 @@ class InstanceRegistry
 
     public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = [], ?int $ownerId = null): string
     {
-        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire', 'plugin_list', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_list', 'world_backup_list', 'world_backup', 'world_restore', 'world_activate', 'world_import', 'world_export', 'version_change', 'version_inspect'], true), 422);
+        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire', 'plugin_list', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_list', 'world_backup_list', 'world_backup', 'world_restore', 'world_activate', 'world_import', 'world_export', 'version_change', 'version_inspect', 'modpack_stage'], true), 422);
         if ($ownerId !== null) {
             abort_unless(in_array($action, ['start', 'stop', 'restart', 'status', 'metrics', 'console', 'command'], true), 422);
         }
@@ -95,6 +95,10 @@ class InstanceRegistry
                 // Adopt legacy reservations only after an operator-selected connector identifies its backend.
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime' => $backend]);
             }
+            if ($action === 'modpack_stage') {
+                abort_unless(in_array($backend, ['docker', 'podman'], true), 409, 'Modpack staging requires a container fleet.');
+                abort_if($node->isUnderMaintenance(), 409, 'Node is in maintenance.');
+            }
             if (str_starts_with($action, 'version_')) {
                 abort_unless(in_array($backend, ['docker', 'podman'], true), 409, 'Version management requires a container fleet.');
                 abort_if($node->isUnderMaintenance(), 409, 'Node is in maintenance.');
@@ -120,7 +124,7 @@ class InstanceRegistry
                 'port' => (int) $instance->port,
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
-            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_provider', 'plugin_sha256', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256', 'transfer_bytes', 'transfer_sha256', 'target_version'])));
+            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_provider', 'plugin_sha256', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256', 'transfer_bytes', 'transfer_sha256', 'target_version', 'modpack_loader'])));
             if (str_starts_with($action, 'version_')) {
                 DB::table('omcp_instances')->where('id', $id)->update([
                     'version_job_id' => $job, 'version_target' => $extra['target_version'], 'runtime_requested_at' => now(),
@@ -131,7 +135,7 @@ class InstanceRegistry
                     'requester_id' => $ownerId, 'instance_id' => $id, 'control_grant_id' => $instance->control_grant_id,
                 ]);
             }
-            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_backup', 'world_restore', 'world_activate', 'world_import'], true)) {
+            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_backup', 'world_restore', 'world_activate', 'world_import', 'modpack_stage'], true)) {
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
             }
             if ($action === 'retire') {

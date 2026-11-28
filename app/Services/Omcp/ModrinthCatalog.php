@@ -10,7 +10,7 @@ class ModrinthCatalog
     private const ID = '/\A[A-Za-z0-9]{3,32}\z/';
     private const MAX_FILE = 67108864;
 
-    private function get(string $path, array $query): array
+    protected function get(string $path, array $query): array
     {
         try {
             $response = Http::withHeaders(['User-Agent' => 'OMCP-Panel/0.1 (https://github.com/onionnot66-cpu/OMCP-PANEL-PRO)'])
@@ -128,7 +128,7 @@ class ModrinthCatalog
         ];
     }
 
-    private function short(mixed $value, int $max): string
+    protected function short(mixed $value, int $max): string
     {
         return is_string($value) ? mb_substr($value, 0, $max) : '';
     }

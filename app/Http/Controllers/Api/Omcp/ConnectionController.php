@@ -38,7 +38,7 @@ class ConnectionController extends Controller
         $data = $request->validate([
             'node_id' => 'required|integer|min:1',
             'runtime' => 'sometimes|in:none,native,podman,docker',
-            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision,fleet_files,fleet_console_input,fleet_retire,fleet_owner_controls,fleet_plugins,fleet_worlds,fleet_versions',
+            'capabilities' => 'required|array:os,arch,cpus,root,docker_cli,systemd_cli,java_cli,native_enabled,native_provision,native_console_input,fleet_enabled,fleet_provision,fleet_files,fleet_console_input,fleet_retire,fleet_owner_controls,fleet_plugins,fleet_worlds,fleet_versions,fleet_modpacks',
             'capabilities.os' => 'required|string|max:32',
             'capabilities.arch' => 'required|string|max:32',
             'capabilities.cpus' => 'required|integer|min:1|max:65536',
@@ -58,6 +58,7 @@ class ConnectionController extends Controller
             'capabilities.fleet_plugins' => 'sometimes|boolean',
             'capabilities.fleet_worlds' => 'sometimes|boolean',
             'capabilities.fleet_versions' => 'sometimes|boolean',
+            'capabilities.fleet_modpacks' => 'sometimes|boolean',
             'telemetry' => 'sometimes|array:console,metrics',
             'telemetry.console' => 'required_with:telemetry|string|max:3500',
             'telemetry.metrics' => 'required_with:telemetry|array:process_running,java_heap_limit_mib,filesystem_available_bytes,filesystem_capacity_bytes,java_rss_bytes,cpu_host_percent',

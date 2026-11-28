@@ -102,8 +102,10 @@ func run() error {
  allowPlugins:=flag.Bool("allow-fleet-plugins",false,"enable offline trusted admin Modrinth plugin management on container fleets")
  allowWorlds:=flag.Bool("allow-fleet-worlds",false,"enable offline trusted admin world backups and restore on container fleets")
  allowVersions:=flag.Bool("allow-fleet-versions",false,"enable offline trusted admin same-software version upgrades")
+ allowModpacks:=flag.Bool("allow-fleet-modpacks",false,"enable admin verified modpack archive staging (not installation)")
  flag.Parse()
  backend,err:=selectRuntime(*selectedRuntime,*trustedDir!="",*fleetRoot!="",*fleetImage,*imageID);if err!=nil{return err}
+ if *allowModpacks && (backend!="docker" && backend!="podman"){return errors.New("modpack staging requires a container fleet")}
  if *allowVersions && (backend!="docker" && backend!="podman"){return errors.New("version management requires a container fleet")}
  if *allowWorlds && (backend!="docker" && backend!="podman"){return errors.New("world management requires a container fleet")}
  if *allowPlugins && (backend!="docker" && backend!="podman"){return errors.New("plugin management requires a container fleet")}
@@ -154,6 +156,7 @@ func run() error {
   multi.allowPlugins=*allowPlugins
   multi.allowWorlds=*allowWorlds
   multi.allowVersions=*allowVersions
+  multi.allowModpacks=*allowModpacks
   multi.transferConfig=c
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   for _,s:=range multi.servers{

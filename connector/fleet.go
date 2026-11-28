@@ -30,6 +30,7 @@ type fleet struct{
  allowPlugins bool
  allowWorlds bool
  allowVersions bool
+ allowModpacks bool
  transferConfig config
  provision bool
  lock *os.File
@@ -87,6 +88,7 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  if f.versionBlocked(j.Payload.InstanceID)&&j.Action!="instance.version_inspect"{return false,"unfinished version change; inspect or repair locally"}
  if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  switch j.Action{
+ case "instance.modpack_stage":return f.modpackJob(ctx,j)
  case "instance.version_change","instance.version_inspect":return f.versionJob(ctx,s,j)
  case "instance.world_list","instance.world_backup_list","instance.world_backup","instance.world_restore","instance.world_activate","instance.world_import","instance.world_export":return f.worldJob(ctx,s,j)
  case "instance.plugin_list","instance.plugin_install","instance.plugin_enable","instance.plugin_disable","instance.plugin_delete":return f.pluginJob(ctx,s,j)

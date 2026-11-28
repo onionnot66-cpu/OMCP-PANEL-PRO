@@ -28,6 +28,7 @@ type jobPayload struct {
  Software string `json:"software"`
  Version string `json:"version"`
  TargetVersion string `json:"target_version"`
+ ModpackLoader string `json:"modpack_loader"`
  Port int `json:"port"`
  AcceptEULA bool `json:"accept_eula"`
  Command string `json:"command"`
