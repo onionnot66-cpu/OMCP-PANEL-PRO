@@ -33,6 +33,10 @@ def check_account(username, own, other, fixture):
             for name in ("native", "podman", "docker"):
                 runtime.find_element(By.CSS_SELECTOR, f"option[value='{name}']")
             wait.until(condition.presence_of_element_located((By.CSS_SELECTOR, "button[data-action='retire']")))
+            browser.get(BASE + f"/admin/nodes/view/{fixture['node']}/omcp/instances/{fixture['owner_instance']}/plugins")
+            wait.until(condition.visibility_of_element_located((By.ID, "pluginQuery")))
+            if browser.find_element(By.ID, "pluginInstall").is_enabled():
+                raise RuntimeError("Install enabled before version selection")
         else:
             controls = wait.until(condition.visibility_of_element_located((By.CSS_SELECTOR, "[aria-label='Trusted server controls']")))
             for action in ("start", "stop", "restart", "status", "metrics", "console"):

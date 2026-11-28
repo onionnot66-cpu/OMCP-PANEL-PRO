@@ -122,7 +122,15 @@ def main():
     request(owner, owner_action, status=403, data={"action": "status"}, csrf=owner_page.csrf)
     request(admin, grant, status=302, data={"enabled": 1, "trusted_confirmed": 1}, csrf=admin_page.csrf)
     request(owner, job, status=404)
+    plugins = instances + "/" + fixture["owner_instance"] + "/plugins"
+    if b"Modrinth catalog" not in request(admin, plugins):
+        raise RuntimeError("Plugin manager page missing")
+    request(owner, plugins, status=403)
+    request(owner, plugins + "/catalog", status=403)
+    request(owner, plugins, status=403, data={"action": "plugin_list"}, csrf=owner_page.csrf)
+    request(admin, plugins, status=422, data={"action": "plugin_install", "plugin_project": "ABCDEFGH", "plugin_version": "IJKLMNOP", "plugin_sha512": "a" * 128}, csrf=admin_page.csrf)
     print("Owner grant, job access, revocation and generation isolation passed.")
+    print("Plugin manager admin access and explicit confirmation passed.")
     if b"OMCP" not in request(owner, "/"):
         raise RuntimeError("User dashboard unavailable")
     print("HTTP smoke passed: compiled assets, real login, admin pages, owner scoping and guest denial.")
