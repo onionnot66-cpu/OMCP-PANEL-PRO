@@ -100,6 +100,7 @@
                                     <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.network', [$node->id, $instance->id]) }}">Networking</a>
                                     @endif
                                     @if (in_array($instance->runtime, ['docker', 'podman'], true) && !$instance->retirement_job_id)
+                                    <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.modpacks', [$node->id, $instance->id]) }}">Modpack staging</a>
                                     <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.versions', [$node->id, $instance->id]) }}">Version changer</a>
                                     <a class="btn btn-default btn-xs" href="{{ route('admin.nodes.omcp.instances.worlds', [$node->id, $instance->id]) }}">Worlds &amp; backups</a>
                                     @endif

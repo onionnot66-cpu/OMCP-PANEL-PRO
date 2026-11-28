@@ -1,0 +1,5 @@
+# Modpack staging (not installation)
+
+Admin > Nodes > OMCP instances > Modpack staging. Enable --allow-fleet-modpacks on a trusted rootless container fleet. Search Modrinth by the reserved Minecraft release and Fabric, Forge, NeoForge or Quilt. Choose a stable .mrpack with a provider SHA-512. The connector re-fetches exact metadata from Modrinth, downloads at most 64 MiB from its fixed CDN, verifies size and SHA-512, checks the bounded archive paths and modrinth.index.json, and reports loader version, required/optional/client-only file counts and listed server download bytes. The private staging archive .omcp-staged-pack-<instance UUID>.mrpack is outside the mounted game directory. One archive per instance; archive or remove it locally before another selection. No third-party mod URLs are fetched. No overrides extracted. No loader installed. No existing server data changed.
+
+Actual modpack installation requires separate loader bootstrap, per-file download verification, safe extraction and a fresh runtime with appropriate Java. Do not use staging as evidence of compatibility or safety. Fixture tests do not prove live provider downloads.

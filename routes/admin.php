@@ -165,6 +165,9 @@ Route::group(['prefix' => 'nodes'], function () {
     Route::post('/view/{node:id}/omcp/instances', [Admin\Nodes\OmcpInstanceController::class, 'store'])->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.store');
     Route::post('/view/{node:id}/omcp/instances/{instance}/files', [Admin\Nodes\OmcpInstanceController::class, 'files'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.files');
     Route::post('/view/{node:id}/omcp/instances/{instance}/action', [Admin\Nodes\OmcpInstanceController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.action');
+    Route::get('/view/{node:id}/omcp/instances/{instance}/modpacks', [Admin\Nodes\OmcpModpackController::class, 'index'])->whereUuid('instance')->name('admin.nodes.omcp.instances.modpacks');
+    Route::get('/view/{node:id}/omcp/instances/{instance}/modpacks/catalog', [Admin\Nodes\OmcpModpackController::class, 'catalog'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.modpacks.catalog');
+    Route::post('/view/{node:id}/omcp/instances/{instance}/modpacks', [Admin\Nodes\OmcpModpackController::class, 'stage'])->whereUuid('instance')->middleware('throttle:5,1')->name('admin.nodes.omcp.instances.modpacks.stage');
     Route::get('/view/{node:id}/omcp/instances/{instance}/versions', [Admin\Nodes\OmcpVersionController::class, 'index'])->whereUuid('instance')->name('admin.nodes.omcp.instances.versions');
     Route::post('/view/{node:id}/omcp/instances/{instance}/versions', [Admin\Nodes\OmcpVersionController::class, 'action'])->whereUuid('instance')->middleware('throttle:5,1')->name('admin.nodes.omcp.instances.versions.action');
     Route::get('/view/{node:id}/omcp/instances/{instance}/network', [Admin\Nodes\OmcpNetworkController::class, 'index'])->whereUuid('instance')->name('admin.nodes.omcp.instances.network');
