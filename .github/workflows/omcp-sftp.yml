@@ -1,0 +1,27 @@
+name: OMCP SFTP staging checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/omcp-sftp-init.sh'
+      - 'tests/Smoke/sftp-staging.sh'
+      - '.github/workflows/omcp-sftp.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenSSH server
+        run: |
+          if ! test -x /usr/sbin/sshd; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends openssh-server
+          fi
+      - name: Validate and exercise isolated SFTP staging
+        run: |
+          bash -n scripts/omcp-sftp-init.sh tests/Smoke/sftp-staging.sh
+          bash tests/Smoke/sftp-staging.sh
