@@ -72,7 +72,17 @@
                                 <td>{{ $instance->owner_id ?? 'Unassigned' }}</td>
                                 <td>{{ ucfirst($instance->software) }} {{ $instance->version }}<br><small>{{ $instance->runtime ?? 'Legacy runtime selection' }}</small></td>
                                 <td>{{ $instance->retired_at ? 'Released (was ' . $instance->retired_port . ')' : $instance->port }}</td><td>{{ $instance->retired_at ? 'Released' : $instance->memory_mib . ' MiB' }}</td><td>{{ $instance->disk_mib }} MiB</td>
-                                <td>{{ $instance->retired_at ? 'Retired; files retained' : ($instance->retirement_job_id ? 'Retirement requested' : ($instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved')) }}</td>
+                                @php
+                                    $retirement = $retirementJobs->get($instance->retirement_job_id);
+                                    $retirementState = $retirement->state ?? 'unavailable';
+                                    if ($retirement && in_array($retirementState, ['queued','running'], true) && \Illuminate\Support\Carbon::parse($retirement->expires_at)->lte(now())) {
+                                        $retirementState = 'expired';
+                                    }
+                                    $canFinalize = $retirementState === 'succeeded' && $retirement->result === 'retired:' . $instance->id;
+                                @endphp
+                                <td>{{ $instance->retired_at ? 'Retired; files retained' : ($instance->retirement_job_id ? 'Retirement requested' : ($instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved')) }}
+                                    @if ($instance->retirement_job_id && !$instance->retired_at)<br><small>{{ ucfirst($retirementState) }}@if ($retirement && !$canFinalize && $retirement->result): {{ $retirement->result }}@endif</small>@endif
+                                </td>
                                 <td>
                                     @if (!$instance->retired_at)
                                     <div class="btn-group" style="margin-bottom:6px">
@@ -90,7 +100,7 @@
                                     <button type="button" class="btn btn-warning btn-xs omcpInstanceAction" data-action="retire" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ $instance->retirement_job_id ? 'Check / retry retirement' : 'Retire (keep files)' }}</button>
                                     @endif
                                     @if ($instance->retirement_job_id)
-                                    <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release RAM and port after verified retirement? Files and disk reservation remain.');">@csrf @method('DELETE')<button class="btn btn-primary btn-xs" type="submit">Finalize release</button></form>
+                                    <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release RAM and port after verified retirement? Files and disk reservation remain.');">@csrf @method('DELETE')<button class="btn btn-primary btn-xs" type="submit" @disabled(!$canFinalize)>Finalize release</button></form>
                                     @elseif (!$instance->runtime_requested_at)
                                     <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release this reservation? No game files will be deleted.');">@csrf @method('DELETE')<button class="btn btn-danger btn-xs" type="submit">Release</button></form>
                                     @endif

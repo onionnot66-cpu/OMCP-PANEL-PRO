@@ -13,7 +13,10 @@ class OmcpInstanceController extends Controller
     public function index(Node $node)
     {
         $instances = DB::table('omcp_instances')->where('node_id', $node->id)->orderBy('name')->get();
-        return view('admin.nodes.view.omcp-instances', compact('node', 'instances'));
+        $retirementJobs = DB::table('omcp_jobs')->where('node_id', $node->id)
+            ->whereIn('id', $instances->pluck('retirement_job_id')->filter()->all())
+            ->select(['id', 'state', 'result', 'expires_at'])->get()->keyBy('id');
+        return view('admin.nodes.view.omcp-instances', compact('node', 'instances', 'retirementJobs'));
     }
 
     public function store(Request $request, Node $node, InstanceRegistry $registry)

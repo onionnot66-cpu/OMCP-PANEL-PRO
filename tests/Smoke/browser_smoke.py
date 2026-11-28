@@ -32,6 +32,7 @@ def check_account(username, own, other, fixture):
             runtime = wait.until(condition.visibility_of_element_located((By.ID, "runtime")))
             for name in ("native", "podman", "docker"):
                 runtime.find_element(By.CSS_SELECTOR, f"option[value='{name}']")
+            wait.until(condition.presence_of_element_located((By.CSS_SELECTOR, "button[data-action='retire']")))
         else:
             browser.set_window_size(390, 844)
             if not browser.find_element(*selector).is_displayed():

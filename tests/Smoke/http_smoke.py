@@ -90,8 +90,14 @@ def main():
     instances = f"/admin/nodes/view/{node}/omcp/instances"
     if b"OMCP Connect" not in request(admin, config):
         raise RuntimeError("Admin connector UI missing")
-    if b"Offline File Manager" not in request(admin, instances):
-        raise RuntimeError("Admin instance file manager missing")
+    admin_html = request(admin, instances)
+    if b"Offline File Manager" not in admin_html or b"Retire (keep files)" not in admin_html:
+        raise RuntimeError("Admin instance file manager or retirement UI missing")
+    admin_page = Page(admin_html)
+    owner_page = Page(request(owner, "/"))
+    action = instances + "/" + fixture["owner_instance"] + "/action"
+    request(owner, action, status=403, data={"action": "retire", "confirm_retire": 1}, csrf=owner_page.csrf)
+    request(admin, action, status=422, data={"action": "retire"}, csrf=admin_page.csrf)
     request(owner, config, status=403)
     request(owner, instances, status=403)
     owner_ids = [x["id"] for x in json.loads(request(owner, "/api/client/omcp/instances"))["data"]]
