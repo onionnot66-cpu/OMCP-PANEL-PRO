@@ -71,6 +71,10 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  if j.Payload.Runtime!="" && j.Payload.Runtime!=f.backend{return false,"reserved runtime differs from local fleet backend"}
  s,ok:=f.servers[j.Payload.InstanceID];if !ok{return false,"instance is not locally authorized"}
  if j.Payload.Memory!=s.memory||j.Payload.Port!=f.ports[j.Payload.InstanceID]{return false,"reservation does not match local memory/port manifest"}
+ retired,err:=f.retired(j.Payload.InstanceID)
+ if err!=nil{return false,"retirement marker could not be verified"}
+ if retired && j.Action!="instance.retire"{return false,"instance permanently retired"}
+ if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  info,err:=os.Lstat(s.dir)
  if err!=nil&&!os.IsNotExist(err){return false,"instance directory unavailable"}
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}

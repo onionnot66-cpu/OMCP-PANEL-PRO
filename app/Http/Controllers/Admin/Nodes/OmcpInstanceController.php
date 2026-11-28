@@ -24,7 +24,10 @@ class OmcpInstanceController extends Controller
 
     public function action(Request $request, Node $node, string $instance, InstanceRegistry $registry, \Pterodactyl\Services\Omcp\JobService $jobs)
     {
-        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics,command', 'accept_eula' => 'sometimes|boolean', 'command' => 'required_if:action,command|nullable|string|max:256']);
+        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics,command,retire', 'accept_eula' => 'sometimes|boolean', 'command' => 'required_if:action,command|nullable|string|max:256', 'confirm_retire' => 'required_if:action,retire|sometimes|accepted']);
+        if ($data['action'] === 'retire') {
+            abort_unless($request->boolean('confirm_retire'), 422, 'Explicit retirement confirmation required.');
+        }
         $extra = [];
         if ($data['action'] === 'command') {
             abort_unless(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed($data['command']), 422, 'Unsupported Minecraft command.');
