@@ -165,6 +165,8 @@ Route::group(['prefix' => 'nodes'], function () {
     Route::post('/view/{node:id}/omcp/instances', [Admin\Nodes\OmcpInstanceController::class, 'store'])->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.store');
     Route::post('/view/{node:id}/omcp/instances/{instance}/files', [Admin\Nodes\OmcpInstanceController::class, 'files'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.files');
     Route::post('/view/{node:id}/omcp/instances/{instance}/action', [Admin\Nodes\OmcpInstanceController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.action');
+    Route::get('/view/{node:id}/omcp/instances/{instance}/worlds', [Admin\Nodes\OmcpWorldController::class, 'index'])->whereUuid('instance')->name('admin.nodes.omcp.instances.worlds');
+    Route::post('/view/{node:id}/omcp/instances/{instance}/worlds', [Admin\Nodes\OmcpWorldController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.worlds.action');
     Route::get('/view/{node:id}/omcp/instances/{instance}/plugins', [Admin\Nodes\OmcpPluginController::class, 'index'])->whereUuid('instance')->name('admin.nodes.omcp.instances.plugins');
     Route::get('/view/{node:id}/omcp/instances/{instance}/plugins/catalog', [Admin\Nodes\OmcpPluginController::class, 'catalog'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.plugins.catalog');
     Route::post('/view/{node:id}/omcp/instances/{instance}/plugins', [Admin\Nodes\OmcpPluginController::class, 'action'])->whereUuid('instance')->middleware('throttle:10,1')->name('admin.nodes.omcp.instances.plugins.action');
