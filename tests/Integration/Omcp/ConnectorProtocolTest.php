@@ -2,31 +2,14 @@
 
 namespace Pterodactyl\Tests\Integration\Omcp;
 
-use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Pterodactyl\Models\Location;
 use Pterodactyl\Models\Node;
 use Pterodactyl\Services\Omcp\EnrollmentService;
 use Pterodactyl\Services\Omcp\JobService;
-use Pterodactyl\Tests\Integration\IntegrationTestCase;
 
-class ConnectorProtocolTest extends IntegrationTestCase
+class ConnectorProtocolTest extends OmcpIntegrationTestCase
 {
-    // The upstream exception handler intentionally rolls back every open
-    // database transaction when rendering a failed HTTP request. These
-    // protocol tests exercise failures and then retry using the same data,
-    // so do not wrap the entire test in DatabaseTransactions.
-    use DatabaseMigrations;
-
-    protected $seed = true;
-
-    protected function beforeRefreshingDatabase(): void
-    {
-        if (!str_contains((string) config('database.connections.' . config('database.default') . '.database'), 'test')) {
-            throw new \RuntimeException('OMCP protocol tests require a dedicated test database.');
-        }
-    }
-
     private function node(): Node
     {
         return Node::factory()->create(['location_id' => Location::factory()->create()->id]);
