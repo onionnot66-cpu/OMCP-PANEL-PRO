@@ -18,7 +18,7 @@ export default function OmcpOwnerControls({ instance }: { instance: string }) {
     useEffect(() => {
         if (!job) return;
         let cancelled = false;
-        let timer: ReturnType<typeof setTimeout>;
+        let timer: ReturnType<typeof setTimeout> | undefined;
         const deadline = Date.now() + 180000;
         const poll = async () => {
             try {
@@ -43,7 +43,7 @@ export default function OmcpOwnerControls({ instance }: { instance: string }) {
         poll();
         return () => {
             cancelled = true;
-            clearTimeout(timer);
+            if (timer !== undefined) clearTimeout(timer);
         };
     }, [job, base]);
 

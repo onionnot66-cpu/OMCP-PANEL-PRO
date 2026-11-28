@@ -104,6 +104,25 @@ def main():
     admin_ids = [x["id"] for x in json.loads(request(admin, "/api/client/omcp/instances"))["data"]]
     if owner_ids != [fixture["owner_instance"]] or admin_ids != [fixture["admin_instance"]]:
         raise RuntimeError("Owner reservation scope mismatch")
+    owner_action = "/api/client/omcp/instances/" + fixture["owner_instance"] + "/action"
+    other_action = "/api/client/omcp/instances/" + fixture["admin_instance"] + "/action"
+    grant = instances + "/" + fixture["owner_instance"] + "/controls"
+    request(owner, owner_action, status=403, data={"action": "status"}, csrf=owner_page.csrf)
+    request(owner, other_action, status=404, data={"action": "status"}, csrf=owner_page.csrf)
+    request(owner, grant, status=403, data={"enabled": 1, "trusted_confirmed": 1}, csrf=owner_page.csrf)
+    request(admin, grant, status=422, data={"enabled": 1}, csrf=admin_page.csrf)
+    request(admin, grant, status=302, data={"enabled": 1, "trusted_confirmed": 1}, csrf=admin_page.csrf)
+    result = json.loads(request(owner, owner_action, status=202, data={"action": "status"}, csrf=owner_page.csrf))
+    job = "/api/client/omcp/instances/" + fixture["owner_instance"] + "/jobs/" + result["id"]
+    if json.loads(request(owner, job))["state"] != "queued":
+        raise RuntimeError("Owner job not queued")
+    request(admin, job, status=404)
+    request(admin, grant, status=302, data={"enabled": 0}, csrf=admin_page.csrf)
+    request(owner, job, status=404)
+    request(owner, owner_action, status=403, data={"action": "status"}, csrf=owner_page.csrf)
+    request(admin, grant, status=302, data={"enabled": 1, "trusted_confirmed": 1}, csrf=admin_page.csrf)
+    request(owner, job, status=404)
+    print("Owner grant, job access, revocation and generation isolation passed.")
     if b"OMCP" not in request(owner, "/"):
         raise RuntimeError("User dashboard unavailable")
     print("HTTP smoke passed: compiled assets, real login, admin pages, owner scoping and guest denial.")

@@ -34,6 +34,10 @@ def check_account(username, own, other, fixture):
                 runtime.find_element(By.CSS_SELECTOR, f"option[value='{name}']")
             wait.until(condition.presence_of_element_located((By.CSS_SELECTOR, "button[data-action='retire']")))
         else:
+            controls = wait.until(condition.visibility_of_element_located((By.CSS_SELECTOR, "[aria-label='Trusted server controls']")))
+            for action in ("start", "stop", "restart", "status", "metrics", "console"):
+                if not any(button.text.lower() == action for button in controls.find_elements(By.TAG_NAME, "button")):
+                    raise RuntimeError("Missing owner control: " + action)
             browser.set_window_size(390, 844)
             if not browser.find_element(*selector).is_displayed():
                 raise RuntimeError("Owner reservations disappeared at mobile width")

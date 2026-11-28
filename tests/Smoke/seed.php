@@ -26,10 +26,12 @@ app(Pterodactyl\Services\Omcp\EnrollmentService::class)->issue($node->id);
 Illuminate\Support\Facades\DB::table('omcp_connections')->where('node_id', $node->id)->update([
     'enrollment_hash' => null, 'enrollment_expires_at' => null,
     'credential_hash' => hash('sha256', random_bytes(32)),
+    'last_seen_at' => now(),
+    'capabilities' => json_encode(['fleet_enabled' => true, 'runtime' => 'docker', 'fleet_owner_controls' => true]),
 ]);
 $registry = app(Pterodactyl\Services\Omcp\InstanceRegistry::class);
 $common = ['software' => 'paper', 'version' => '1.21.4', 'memory_mib' => 1024, 'disk_mib' => 4096];
-$ownerId = $registry->reserve($node->id, $common + ['owner_id' => $owner->id, 'name' => 'Owner test instance', 'port' => 25565]);
+$ownerId = $registry->reserve($node->id, $common + ['owner_id' => $owner->id, 'name' => 'Owner test instance', 'port' => 25565, 'runtime' => 'docker']);
 $adminId = $registry->reserve($node->id, $common + ['owner_id' => $admin->id, 'name' => 'Admin test instance', 'port' => 25566]);
 $connectorNode = Pterodactyl\Models\Node::factory()->create([
     'location_id' => $node->location_id, 'name' => 'OMCP CI Connector',
