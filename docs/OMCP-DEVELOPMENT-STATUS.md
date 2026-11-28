@@ -24,3 +24,9 @@ Native and portable environments without sufficient isolation remain trusted/adm
 5. Implement Minecraft tools on that foundation.
 
 All changes are direct, non-forced fast-forward commits to main. No production data or third-party EULA acceptance is implied by tests.
+
+## Container retirement milestone
+
+Admin-only data-preserving retirement is implemented in ef03a56. The runtime and Go CI passed at [run 46172035448](https://github.com/onionnot66-cpu/OMCP-PANEL-PRO/actions/runs/46172035448), including active-container refusal, durable retirement, idempotent retry, retained files and independent container lifecycle. Laravel integration and unit steps passed in [run 46172035451](https://github.com/onionnot66-cpu/OMCP-PANEL-PRO/actions/runs/46172035451); consult the final run conclusion for frontend/browser evidence. The connector installer at 950a86d uses the tested runtime revision.
+
+See [retirement procedure](OMCP-RETIREMENT.md). Retirement releases RAM and port only after verified lease completion and admin finalization; disk allocation remains. Do not downgrade a retired fleet. Native retirement, physical purge, automatic manifest changes and hostile-tenant security remain out of scope.
