@@ -52,7 +52,7 @@ class InstanceRegistry
 
     public function dispatch(int $nodeId, string $id, string $action, bool $acceptEula, JobService $jobs, array $extra = [], ?int $ownerId = null): string
     {
-        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire', 'plugin_list', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_list', 'world_backup_list', 'world_backup', 'world_restore', 'world_activate'], true), 422);
+        abort_unless(in_array($action, ['install', 'start', 'stop', 'restart', 'kill', 'status', 'console', 'metrics', 'files', 'file_read', 'file_write', 'file_delete', 'property', 'command', 'retire', 'plugin_list', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_list', 'world_backup_list', 'world_backup', 'world_restore', 'world_activate', 'world_import', 'world_export'], true), 422);
         if ($ownerId !== null) {
             abort_unless(in_array($action, ['start', 'stop', 'restart', 'status', 'metrics', 'console', 'command'], true), 422);
         }
@@ -107,13 +107,13 @@ class InstanceRegistry
                 'port' => (int) $instance->port,
                 'memory_mib' => (int) $instance->memory_mib,
                 'accept_eula' => $acceptEula,
-            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256'])));
+            ] + array_intersect_key($extra, array_flip(['file', 'content_base64', 'expected', 'key', 'value', 'command', 'plugin_project', 'plugin_version', 'plugin_sha512', 'plugin_disabled', 'world', 'backup_id', 'backup_sha256', 'transfer_bytes', 'transfer_sha256'])));
             if ($ownerId !== null) {
                 DB::table('omcp_jobs')->where('id', $job)->update([
                     'requester_id' => $ownerId, 'instance_id' => $id, 'control_grant_id' => $instance->control_grant_id,
                 ]);
             }
-            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_backup', 'world_restore', 'world_activate'], true)) {
+            if (in_array($action, ['install', 'start', 'restart', 'file_write', 'file_delete', 'property', 'plugin_install', 'plugin_enable', 'plugin_disable', 'plugin_delete', 'world_backup', 'world_restore', 'world_activate', 'world_import'], true)) {
                 DB::table('omcp_instances')->where('id', $id)->update(['runtime_requested_at' => now()]);
             }
             if ($action === 'retire') {

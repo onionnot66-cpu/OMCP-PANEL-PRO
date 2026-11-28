@@ -24,6 +24,39 @@ class OmcpWorldController extends Controller
         return view('admin.nodes.view.omcp-worlds', ['node' => $node, 'instance' => $this->instance($node, $instance)]);
     }
 
+    public function transfer(Request $request, Node $node, string $instance, \Pterodactyl\Services\Omcp\TransferService $transfers)
+    {
+        $this->instance($node, $instance);
+        $data = $request->validate([
+            'direction' => 'required|in:import,export',
+            'world' => ['required_if:direction,import', 'nullable', 'regex:/\A[A-Za-z0-9][A-Za-z0-9_-]{0,47}\z/'],
+            'backup_id' => 'required_if:direction,export|nullable|uuid',
+            'backup_sha256' => ['required_if:direction,export', 'nullable', 'regex:/\A[a-f0-9]{64}\z/'],
+            'archive' => 'required_if:direction,import|nullable|file|max:32768',
+            'confirmed' => 'required|accepted',
+        ]);
+        $stream = null;
+        try {
+            if ($data['direction'] === 'import') {
+                $stream = fopen($request->file('archive')->getRealPath(), 'rb');
+                abort_unless(is_resource($stream), 422);
+            }
+            $job = $transfers->queue($node->id, $instance, $data['direction'],
+                array_intersect_key($data, array_flip(['world', 'backup_id', 'backup_sha256'])), $stream);
+            return response()->json(['id' => $job], 202)->header('Cache-Control', 'no-store');
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+    }
+
+    public function download(Node $node, string $instance, string $job, \Pterodactyl\Services\Omcp\TransferService $transfers)
+    {
+        $this->instance($node, $instance);
+        return $transfers->downloadExport($node->id, $instance, $job);
+    }
+
     public function action(Request $request, Node $node, string $instance, InstanceRegistry $registry, JobService $jobs)
     {
         $this->instance($node, $instance);

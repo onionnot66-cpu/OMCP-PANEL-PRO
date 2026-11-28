@@ -9,3 +9,6 @@ Route::post('/heartbeat', [ConnectionController::class, 'heartbeat'])->middlewar
 Route::post('/jobs/claim', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'claim'])->middleware('throttle:120,1');
 Route::post('/jobs/renew', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'renew'])->middleware('throttle:120,1');
 Route::post('/jobs/complete', [\Pterodactyl\Http\Controllers\Api\Omcp\JobController::class, 'complete'])->middleware('throttle:120,1');
+
+Route::get('/transfers/{job}', [\Pterodactyl\Http\Controllers\Api\Omcp\TransferController::class, 'download'])->whereUuid('job')->middleware('throttle:30,1');
+Route::post('/transfers/{job}', [\Pterodactyl\Http\Controllers\Api\Omcp\TransferController::class, 'upload'])->whereUuid('job')->middleware('throttle:30,1');

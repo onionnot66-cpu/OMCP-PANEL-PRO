@@ -15,7 +15,7 @@ class JobService
 
     public function enqueue(int $node, string $action, array $payload = []): string
     {
-        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property', 'instance.command', 'instance.retire', 'instance.plugin_list', 'instance.plugin_install', 'instance.plugin_enable', 'instance.plugin_disable', 'instance.plugin_delete', 'instance.world_list', 'instance.world_backup_list', 'instance.world_backup', 'instance.world_restore', 'instance.world_activate'], true), 422, 'Unsupported action.');
+        abort_unless(in_array($action, ['diagnostic', 'native.start', 'native.stop', 'native.restart', 'native.kill', 'native.status', 'native.console', 'native.install', 'native.metrics', 'native.command', 'instance.install', 'instance.start', 'instance.stop', 'instance.restart', 'instance.kill', 'instance.status', 'instance.console', 'instance.metrics', 'instance.files', 'instance.file_read', 'instance.file_write', 'instance.file_delete', 'instance.property', 'instance.command', 'instance.retire', 'instance.plugin_list', 'instance.plugin_install', 'instance.plugin_enable', 'instance.plugin_disable', 'instance.plugin_delete', 'instance.world_list', 'instance.world_backup_list', 'instance.world_backup', 'instance.world_restore', 'instance.world_activate', 'instance.world_import', 'instance.world_export'], true), 422, 'Unsupported action.');
         return DB::transaction(function () use ($node, $action, $payload) {
             $connection = DB::table('omcp_connections')->where('node_id', $node)->lockForUpdate()->first();
             abort_unless($connection && $connection->credential_hash, 409, 'Connector not enrolled.');
@@ -101,7 +101,7 @@ class JobService
                 }
             }
             $lease = bin2hex(random_bytes(32));
-            $installation = in_array($job->action, ['native.install', 'instance.install', 'instance.world_backup', 'instance.world_restore'], true);
+            $installation = in_array($job->action, ['native.install', 'instance.install', 'instance.world_backup', 'instance.world_restore', 'instance.world_import', 'instance.world_export'], true);
             $now = now();
             $deadline = $now->copy()->addMinutes($installation ? 20 : 2);
             $expires = $renewable ? $now->copy()->addSeconds(60) : $deadline;
@@ -154,6 +154,15 @@ class JobService
                 'lease_hash' => $job->deadline_at ? $receipt : null,
                 'updated_at' => now(),
             ]);
+        });
+    }
+
+    public function authorizeTransfer(int $node, string $credential, string $id, string $lease, string $action): void
+    {
+        DB::transaction(function () use ($node, $credential, $id, $lease, $action) {
+            $this->authenticate($node, $credential);
+            $job = DB::table('omcp_jobs')->where('node_id', $node)->where('id', $id)->first();
+            abort_unless($job && $job->action === $action && $this->ownsLease($job, $lease, now()), 403, 'Transfer lease invalid.');
         });
     }
 
