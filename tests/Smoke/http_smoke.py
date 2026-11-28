@@ -130,7 +130,14 @@ def main():
     request(owner, plugins, status=403, data={"action": "plugin_list"}, csrf=owner_page.csrf)
     request(admin, plugins, status=422, data={"action": "plugin_install", "plugin_project": "ABCDEFGH", "plugin_version": "IJKLMNOP", "plugin_sha512": "a" * 128}, csrf=admin_page.csrf)
     print("Owner grant, job access, revocation and generation isolation passed.")
+    worlds = instances + "/" + fixture["owner_instance"] + "/worlds"
+    if b"World ZIP transfer" not in request(admin, worlds):
+        raise RuntimeError("World transfer page missing")
+    request(owner, worlds, status=403)
+    request(owner, worlds + "/transfer", status=403, data={"direction": "export"}, csrf=owner_page.csrf)
+    request(admin, worlds, status=422, data={"action": "world_backup", "world": "world"}, csrf=admin_page.csrf)
     print("Plugin manager admin access and explicit confirmation passed.")
+    print("World manager admin access and explicit confirmation passed.")
     if b"OMCP" not in request(owner, "/"):
         raise RuntimeError("User dashboard unavailable")
     print("HTTP smoke passed: compiled assets, real login, admin pages, owner scoping and guest denial.")

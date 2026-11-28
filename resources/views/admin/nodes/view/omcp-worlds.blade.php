@@ -84,7 +84,7 @@
                 if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/.test(target)) {status.text('Enter a safe new world folder name.');return;}
                 if (window.confirm('Restore into new folder ' + target + '?')) submit({action:'world_restore',world:target,backup_id:item.id,backup_sha256:item.sha256,confirmed:1});
             }).appendTo(row);
-            $('<button type="button">').addClass('btn btn-default btn-xs worldAction').text('Export ZIP').prop('disabled',item.bytes>33554432).on('click', () => {
+            $('<button type="button">').addClass('btn btn-default btn-xs worldAction').text('Export ZIP').attr('data-oversize',item.bytes>33554432 ? '1' : '0').prop('disabled',item.bytes>33554432).on('click', () => {
                 submitTransfer({direction:'export',backup_id:item.id,backup_sha256:item.sha256,confirmed:1});
             }).appendTo(row);
             row.appendTo(list);
@@ -95,7 +95,7 @@
         if (busy) return;
         busy = true; $('.worldAction').prop('disabled',true);
         status.text('Submitting...');
-        const finish = () => {busy=false;$('.worldAction').prop('disabled',false);};
+        const finish = () => {busy=false;$('.worldAction').not('[data-oversize="1"]').prop('disabled',false);};
         $.ajax({url:url,method:'POST',data:body,dataType:'json',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}'}})
             .done(data => {
                 let attempts=0;
@@ -117,7 +117,7 @@
         if (busy) return;
         busy=true; $('.worldAction').prop('disabled',true);
         $('#worldProgress').val(0); $('#worldDownload').empty(); status.text('Submitting transfer...');
-        const finish=()=>{busy=false;$('.worldAction').prop('disabled',false);};
+        const finish=()=>{busy=false;$('.worldAction').not('[data-oversize="1"]').prop('disabled',false);};
         const form=new FormData();
         Object.keys(body).forEach(key=>form.append(key,body[key]));
         $.ajax({url:transferUrl,method:'POST',data:form,processData:false,contentType:false,dataType:'json',
