@@ -7,7 +7,7 @@ import (
  "encoding/hex"
  "encoding/json"
  "errors"
- "fmt"
+
  "io"
  "os"
  "path/filepath"
@@ -227,6 +227,7 @@ func(f *fleet) worldJob(ctx context.Context,s *supervisor,j job)(bool,string){
   d,e:=f.backupDirectory(p.InstanceID);if e!=nil{return false,e.Error()}
   if e=restoreWorldBackup(ctx,d,s.dir,p.BackupID,p.World,p.BackupSHA256);e!=nil{return false,e.Error()}
   result=map[string]string{"restored":p.World}
+ case "instance.world_import","instance.world_export":return f.transferWorld(ctx,s,j)
  case "instance.world_activate":
   if p.Software!="vanilla"{return false,"automatic activation is limited to Vanilla; Paper-family dimensions need manual review"}
   if _,e:=worldDirectory(s.dir,p.World);e!=nil{return false,e.Error()}

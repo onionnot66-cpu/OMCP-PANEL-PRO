@@ -89,7 +89,7 @@ func pollJob(ctx context.Context, c config, execute jobExecutor) error {
 	}
 	// A panel predating renewal returns no TTL. Keep its existing hard limit.
 	expires := start.Add(2 * time.Minute)
-	if j.Action == "native.install" || j.Action == "instance.install" {
+	if j.Action == "native.install" || j.Action == "instance.install" || j.Action == "instance.world_backup" || j.Action == "instance.world_restore" || j.Action == "instance.world_import" || j.Action == "instance.world_export" {
 		expires = start.Add(20 * time.Minute)
 	}
 	if j.LeaseSeconds > 0 {

@@ -42,7 +42,7 @@ class OmcpWorldController extends Controller
                 abort_unless(is_resource($stream), 422);
             }
             $job = $transfers->queue($node->id, $instance, $data['direction'],
-                array_intersect_key($data, array_flip(['world', 'backup_id', 'backup_sha256'])), $stream);
+                array_filter(array_intersect_key($data, array_flip(['world', 'backup_id', 'backup_sha256'])), static fn ($v) => $v !== null), $stream);
             return response()->json(['id' => $job], 202)->header('Cache-Control', 'no-store');
         } finally {
             if (is_resource($stream)) {

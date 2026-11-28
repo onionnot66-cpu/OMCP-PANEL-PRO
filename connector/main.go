@@ -151,6 +151,7 @@ func run() error {
   multi.allowOwnerControls=*allowOwnerControls
   multi.allowPlugins=*allowPlugins
   multi.allowWorlds=*allowWorlds
+  multi.transferConfig=c
   for _,s:=range multi.servers{s.allowFiles=*allowFiles}
   for _,s:=range multi.servers{
    if err=outsideGameDir(s.dir,*path);err!=nil{return err}
