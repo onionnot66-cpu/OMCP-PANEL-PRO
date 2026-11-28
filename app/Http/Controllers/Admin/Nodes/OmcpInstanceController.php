@@ -24,7 +24,7 @@ class OmcpInstanceController extends Controller
 
     public function action(Request $request, Node $node, string $instance, InstanceRegistry $registry, \Pterodactyl\Services\Omcp\JobService $jobs)
     {
-        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics,command,retire', 'accept_eula' => 'sometimes|boolean', 'command' => 'required_if:action,command|nullable|string|max:256', 'confirm_retire' => 'required_if:action,retire|sometimes|accepted']);
+        $data = $request->validate(['action' => 'required|in:install,start,stop,restart,kill,status,console,metrics,command,retire', 'accept_eula' => 'sometimes|boolean', 'command' => 'required_if:action,command|nullable|string|max:256', 'confirm_retire' => 'sometimes|accepted']);
         if ($data['action'] === 'retire') {
             abort_unless($request->boolean('confirm_retire'), 422, 'Explicit retirement confirmation required.');
         }

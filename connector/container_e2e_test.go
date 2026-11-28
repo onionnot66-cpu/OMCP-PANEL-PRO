@@ -89,7 +89,17 @@ func TestRootlessFleet(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if strings.Contains(run(entries[1], "console"), "list response for") { t.Fatal("console command crossed instance boundary") }
-	run(entries[0], "kill")
+	first := entries[0]
+	retireJob := job{Action:"instance.retire", Payload:jobPayload{InstanceID:first.ID, Memory:first.Memory, Port:first.Port, Runtime:engine}}
+	if ok,_ := f.execute(context.Background(), retireJob); ok {t.Fatal("running instance retired")}
+	run(first, "kill")
+	if run(first, "retire") != retirementReceipt(first.ID) {t.Fatal("missing retirement receipt")}
+	if run(first, "retire") != retirementReceipt(first.ID) {t.Fatal("retirement retry failed")}
+	if ok,_ := f.execute(context.Background(), job{Action:"instance.start", Payload:retireJob.Payload}); ok {t.Fatal("retired instance restarted")}
+	data,err := os.ReadFile(filepath.Join(root, first.ID, "fixture-id"))
+	if err!=nil || string(data)!=first.ID {t.Fatal("retirement removed data")}
+	reloaded:=&fleet{root:root,backend:engine,servers:f.servers,ports:f.ports}
+	if ok,_:=reloaded.execute(context.Background(),job{Action:"instance.start",Payload:retireJob.Payload});ok{t.Fatal("retirement did not persist across supervisor reconstruction")}
 	if !f.servers[entries[1].ID].running() {
 		t.Fatal("second instance stopped")
 	}

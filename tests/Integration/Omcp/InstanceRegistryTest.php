@@ -116,6 +116,76 @@ class InstanceRegistryTest extends OmcpIntegrationTestCase
         $this->assertTrue(\Pterodactyl\Services\Omcp\ConsoleCommand::allowed('list'));
     }
 
+    public function testContainerRetirementReleasesOnlyVerifiedRamAndPortButRetainsDisk(): void
+    {
+        $node = $this->node();
+        $registry = app(InstanceRegistry::class);
+        $jobs = app(\Pterodactyl\Services\Omcp\JobService::class);
+        $owner = User::factory()->create();
+        $id = $registry->reserve($node->id, $this->input($owner) + ['runtime' => 'docker']);
+        $credential = bin2hex(random_bytes(32));
+        DB::table('omcp_connections')->where('node_id', $node->id)->update([
+            'credential_hash' => hash('sha256', $credential),
+            'last_seen_at' => now(),
+            'capabilities' => json_encode(['fleet_enabled' => true, 'runtime' => 'docker', 'fleet_retire' => true]),
+        ]);
+        try {
+            $job = $registry->dispatch($node->id, $id, 'retire', false, $jobs);
+            $this->assertSame($job, $registry->dispatch($node->id, $id, 'retire', false, $jobs));
+            foreach (['release', 'start'] as $operation) {
+                try {
+                    if ($operation === 'release') {
+                        $registry->release($node->id, $id);
+                    } else {
+                        $registry->dispatch($node->id, $id, 'start', false, $jobs);
+                    }
+                    $this->fail('Unverified retirement allowed ' . $operation);
+                } catch (HttpException $e) {
+                    $this->assertSame(409, $e->getStatusCode());
+                }
+            }
+            $claim = $jobs->claim($node->id, $credential, true);
+            $this->assertSame($job, $claim['id']);
+            $jobs->complete($node->id, $credential, ['id' => $job, 'lease' => $claim['lease'], 'success' => true, 'result' => 'retired:wrong']);
+            try {
+                $registry->release($node->id, $id);
+                $this->fail('Mismatched receipt allowed release.');
+            } catch (HttpException $e) {
+                $this->assertSame(409, $e->getStatusCode());
+            }
+            $retry = $registry->dispatch($node->id, $id, 'retire', false, $jobs);
+            $this->assertNotSame($job, $retry);
+            $claim = $jobs->claim($node->id, $credential, true);
+            $jobs->complete($node->id, $credential, ['id' => $retry, 'lease' => $claim['lease'], 'success' => true, 'result' => 'retired:' . $id]);
+            $registry->release($node->id, $id);
+            $registry->release($node->id, $id);
+            $this->assertDatabaseHas('omcp_instances', ['id' => $id, 'port' => null, 'retired_port' => 25565, 'disk_mib' => 4096]);
+            $this->assertNotNull(DB::table('omcp_instances')->where('id', $id)->value('retired_at'));
+            $this->assertCount(0, $registry->forOwner($owner->id));
+            $new = $registry->reserve($node->id, array_replace($this->input($owner), ['memory_mib' => 2048, 'runtime' => 'docker']));
+            $this->assertNotSame($id, $new);
+            try {
+                $registry->reserve($node->id, array_replace($this->input($owner, 25566), ['memory_mib' => 128, 'disk_mib' => 512]));
+                $this->fail('Retained disk reservation or RAM budget ignored.');
+            } catch (HttpException $e) {
+                $this->assertSame(409, $e->getStatusCode());
+            }
+            // Isolate disk accounting from the RAM budget.
+            $registry->release($node->id, $new);
+            $registry->reserve($node->id, $this->input($owner));
+            try {
+                $registry->reserve($node->id, $this->input($owner, 25566));
+                $this->fail('Retired disk budget ignored.');
+            } catch (HttpException $e) {
+                $this->assertStringContainsString('disk budget', $e->getMessage());
+            }
+        } finally {
+            // This suite owns a guarded disposable database; remove test rows
+            // before migration rollback, which intentionally refuses live archives.
+            DB::table('omcp_instances')->where('node_id', $node->id)->delete();
+        }
+    }
+
     public function testRuntimeBoundReservationRejectsDowngradeAndOldConnectors(): void
     {
         $node = $this->node();

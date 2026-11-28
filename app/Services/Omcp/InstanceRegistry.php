@@ -65,7 +65,7 @@ class InstanceRegistry
             abort_if($instance->retirement_job_id && !in_array($action, ['retire', 'stop', 'kill', 'status', 'console', 'metrics'], true), 409, 'Retirement requested; runtime changes are blocked.');
             if ($action === 'retire' && $instance->retirement_job_id) {
                 $previous = DB::table('omcp_jobs')->where('node_id', $nodeId)->where('id', $instance->retirement_job_id)->first();
-                if ($previous && ($previous->state === 'succeeded' || (in_array($previous->state, ['queued', 'running'], true) && \Illuminate\Support\Carbon::parse($previous->expires_at)->gt(now())))) {
+                if ($previous && (($previous->state === 'succeeded' && $previous->result === 'retired:' . $id) || (in_array($previous->state, ['queued', 'running'], true) && \Illuminate\Support\Carbon::parse($previous->expires_at)->gt(now())))) {
                     return $previous->id;
                 }
             }

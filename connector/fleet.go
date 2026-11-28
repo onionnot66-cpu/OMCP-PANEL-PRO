@@ -51,6 +51,7 @@ func openFleet(root,manifest string,budget int,provision,console bool)(*fleet,er
  root,err=filepath.Abs(root);if err!=nil{return nil,err}
  info,err:=os.Stat(root)
  if err!=nil||!info.IsDir()||info.Mode().Perm()&0077!=0{return nil,errors.New("fleet root must be a private directory")}
+ if stat,ok:=info.Sys().(*syscall.Stat_t);!ok||stat.Uid!=uint32(os.Geteuid()){return nil,errors.New("fleet root must belong to connector user")}
  home,err:=os.UserHomeDir();if err!=nil{return nil,err}
  lockdir:=filepath.Join(home,".omcp-connect")
  if err=os.MkdirAll(lockdir,0700);err!=nil{return nil,err}
@@ -74,10 +75,10 @@ func(f *fleet) execute(ctx context.Context,j job)(bool,string){
  retired,err:=f.retired(j.Payload.InstanceID)
  if err!=nil{return false,"retirement marker could not be verified"}
  if retired && j.Action!="instance.retire"{return false,"instance permanently retired"}
- if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  info,err:=os.Lstat(s.dir)
  if err!=nil&&!os.IsNotExist(err){return false,"instance directory unavailable"}
  if err==nil&&(!info.IsDir()||info.Mode().Perm()&0077!=0){return false,"unsafe instance directory"}
+ if j.Action=="instance.retire"{return f.retire(ctx,j.Payload.InstanceID,s)}
  switch j.Action{
  case "instance.files","instance.file_read","instance.file_write","instance.file_delete","instance.property":return s.fileJob(j)
  case "instance.install","instance.start","instance.stop","instance.restart","instance.kill","instance.status","instance.console","instance.metrics","instance.command":

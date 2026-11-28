@@ -17,7 +17,7 @@
 @section('content')
 <div class="callout callout-warning">
     <h4>Experimental trusted instance management</h4>
-    <p>Reserve an instance, then authorize its UUID, port and memory in the local connector fleet manifest before installing or starting it. Use a dedicated OMCP node; do not mix this registry with Wings or the single-server test runtime. Resource budgets are accounting values, not operating-system limits.</p>
+    <p>Reserve an instance, then authorize its UUID, port and memory in the local connector fleet manifest before installing or starting it. Use a dedicated OMCP node; do not mix this registry with Wings or the single-server test runtime. Resource budgets are accounting values, not operating-system limits. Container retirement requires a stopped instance and an updated connector. It keeps all files, blocks further execution, and permits RAM/port release only after verified confirmation. Native retirement requires local reconciliation.</p>
 </div>
 <div class="checkbox"><label><input type="checkbox" id="fleetEula"> I have read and accept the <a href="https://www.minecraft.net/eula" target="_blank" rel="noopener noreferrer">Minecraft EULA</a> for installations.</label></div>
 <pre id="fleetOutput" role="status" style="white-space:pre-wrap;max-height:350px;overflow:auto">No runtime job selected.</pre>
@@ -53,9 +53,9 @@
         <div class="box box-default">
             <div class="box-header with-border"><h3 class="box-title">Node budgets</h3></div>
             <div class="box-body">
-                <p>RAM reserved: {{ $instances->sum('memory_mib') }} / {{ $node->memory }} MiB</p>
-                <p>Disk reserved: {{ $instances->sum('disk_mib') }} / {{ $node->disk }} MiB</p>
-                <p>Reservations: {{ $instances->count() }} / 32</p>
+                <p>RAM reserved: {{ $instances->whereNull('retired_at')->sum('memory_mib') }} / {{ $node->memory }} MiB</p>
+                <p>Disk reserved (including retained worlds): {{ $instances->sum('disk_mib') }} / {{ $node->disk }} MiB</p>
+                <p>Active reservations: {{ $instances->whereNull('retired_at')->count() }} / 32</p>
             </div>
         </div>
     </div>
@@ -71,20 +71,31 @@
                                 <td>{{ $instance->name }}<br><small>{{ $instance->id }}</small></td>
                                 <td>{{ $instance->owner_id ?? 'Unassigned' }}</td>
                                 <td>{{ ucfirst($instance->software) }} {{ $instance->version }}<br><small>{{ $instance->runtime ?? 'Legacy runtime selection' }}</small></td>
-                                <td>{{ $instance->port }}</td><td>{{ $instance->memory_mib }} MiB</td><td>{{ $instance->disk_mib }} MiB</td>
-                                <td>{{ $instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved' }}</td>
+                                <td>{{ $instance->retired_at ? 'Released (was ' . $instance->retired_port . ')' : $instance->port }}</td><td>{{ $instance->retired_at ? 'Released' : $instance->memory_mib . ' MiB' }}</td><td>{{ $instance->disk_mib }} MiB</td>
+                                <td>{{ $instance->retired_at ? 'Retired; files retained' : ($instance->retirement_job_id ? 'Retirement requested' : ($instance->runtime_requested_at ? 'Runtime requested; verify status' : 'Reserved')) }}</td>
                                 <td>
+                                    @if (!$instance->retired_at)
                                     <div class="btn-group" style="margin-bottom:6px">
-                                        @foreach (['install','start','stop','restart','kill','status','console','metrics'] as $action)
+                                        @foreach ($instance->retirement_job_id ? ['stop','kill','status','console','metrics'] : ['install','start','stop','restart','kill','status','console','metrics'] as $action)
                                             <button type="button" class="btn btn-default btn-xs omcpInstanceAction" data-action="{{ $action }}" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ ucfirst($action) }}</button>
                                         @endforeach
                                     </div>
+                                    @if (!$instance->retirement_job_id)
                                     <div class="input-group" style="margin-bottom:6px">
                                         <input type="text" class="form-control input-sm omcpFleetCommand" maxlength="256" autocomplete="off" aria-label="Restricted console command for {{ $instance->name }}" placeholder="list, save-all, say Hello">
                                         <span class="input-group-btn"><button type="button" class="btn btn-primary btn-sm omcpInstanceAction" data-action="command" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">Send</button></span>
                                     </div>
-                                    @if (!$instance->runtime_requested_at)
+                                    @endif
+                                    @if (in_array($instance->runtime, [null, 'docker', 'podman'], true))
+                                    <button type="button" class="btn btn-warning btn-xs omcpInstanceAction" data-action="retire" data-url="{{ route('admin.nodes.omcp.instances.action', [$node->id, $instance->id]) }}">{{ $instance->retirement_job_id ? 'Check / retry retirement' : 'Retire (keep files)' }}</button>
+                                    @endif
+                                    @if ($instance->retirement_job_id)
+                                    <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release RAM and port after verified retirement? Files and disk reservation remain.');">@csrf @method('DELETE')<button class="btn btn-primary btn-xs" type="submit">Finalize release</button></form>
+                                    @elseif (!$instance->runtime_requested_at)
                                     <form method="POST" action="{{ route('admin.nodes.omcp.instances.destroy', [$node->id, $instance->id]) }}" onsubmit="return confirm('Release this reservation? No game files will be deleted.');">@csrf @method('DELETE')<button class="btn btn-danger btn-xs" type="submit">Release</button></form>
+                                    @endif
+                                    @else
+                                    Retained on node; no runtime actions.
                                     @endif
                                 </td>
                             </tr>
@@ -97,14 +108,14 @@
         </div>
     </div>
 </div>
-@if ($instances->isNotEmpty())
+@if ($instances->whereNull('retired_at')->whereNull('retirement_job_id')->isNotEmpty())
 <div class="box box-primary">
     <div class="box-header with-border"><h3 class="box-title">Offline File Manager</h3></div>
     <div class="box-body">
         <p>Admin-only, requires stopped instance and local file opt-in. Text files up to 2 KiB; new/delete restricted to notes-*.txt. Do not put secrets in managed files.</p>
         <label for="fleetFileInstance">Instance</label>
         <select id="fleetFileInstance" class="form-control">
-            @foreach ($instances as $instance)
+            @foreach ($instances->whereNull('retired_at')->whereNull('retirement_job_id') as $instance)
                 <option value="{{ route('admin.nodes.omcp.instances.files', [$node->id, $instance->id]) }}">{{ $instance->name }} ({{ $instance->id }})</option>
             @endforeach
         </select>
@@ -212,6 +223,10 @@
             if (action === 'kill' && !window.confirm('Force stop? Unsaved changes may be lost.')) return;
             const commandInput = $(this).closest('td').find('.omcpFleetCommand');
             const body = {action: action, accept_eula: $('#fleetEula').prop('checked') ? 1 : 0};
+            if (action === 'retire') {
+                if (!window.confirm('Retire this stopped container permanently? World files stay on the node. RAM and port release requires a second confirmation.')) return;
+                body.confirm_retire = 1;
+            }
             if (action === 'command') {
                 body.command = commandInput.val();
                 if (!body.command || !body.command.trim()) return;
@@ -227,6 +242,7 @@
                         $.getJSON(url).done(function (job) {
                             output.text(job.state + (job.result ? '\n' + job.result : ''));
                             if ((job.state === 'queued' || job.state === 'running') && ++attempts < 270) setTimeout(poll,5000);
+                            else if (action === 'retire') { window.location.reload(); }
                             else controls.prop('disabled',false);
                         }).fail(function () { output.text('Job result unavailable.'); controls.prop('disabled',false); });
                     }

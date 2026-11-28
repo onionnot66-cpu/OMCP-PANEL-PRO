@@ -35,16 +35,15 @@ func (f *fleet) retire(ctx context.Context,id string,s *supervisor)(bool,string)
  path,err:=f.retirementMarker(id);if err!=nil{return false,err.Error()}
  retired,err:=f.retired(id);if err!=nil{return false,err.Error()}
  if !retired {
-  // Create and sync privately before publishing without replacement.
+  // Create and sync privately before atomic publication under the fleet lock.
   tmp,err:=os.CreateTemp(f.root,".omcp-retire-tmp-");if err!=nil{return false,err.Error()}
   defer os.Remove(tmp.Name())
   if _,err=fmt.Fprintln(tmp,retirementReceipt(id));err==nil{err=tmp.Sync()}
   closeErr:=tmp.Close()
   if err!=nil{return false,err.Error()};if closeErr!=nil{return false,closeErr.Error()}
   if err=ctx.Err();err!=nil{return false,err.Error()}
-  if err=os.Link(tmp.Name(),path);err!=nil{return false,err.Error()}
-  // readPrivateFile rejects hardlinks, so drop the temporary link before ack.
-  if err=os.Remove(tmp.Name());err!=nil{return false,err.Error()}
+  if _,err=os.Lstat(path);!os.IsNotExist(err){return false,"retirement marker changed; retry"}
+  if err=os.Rename(tmp.Name(),path);err!=nil{return false,err.Error()}
  }
  root,err:=os.Open(f.root);if err!=nil{return false,err.Error()}
  defer root.Close()
