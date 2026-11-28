@@ -17,6 +17,9 @@ on:
       - 'omcp-ui-test-install.sh'
       - '.github/workflows/omcp-panel-checks.yml'
   workflow_dispatch:
+concurrency:
+  group: omcp-panel-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -51,7 +54,8 @@ jobs:
       DB_PASSWORD: omcp_ci_only
       CACHE_DRIVER: array
       CACHE_STORE: array
-      SESSION_DRIVER: array
+      SESSION_DRIVER: file
+      APP_2FA_REQUIRED: '0'
       QUEUE_CONNECTION: sync
       MAIL_MAILER: array
       RECAPTCHA_ENABLED: 'false'
@@ -68,6 +72,7 @@ jobs:
         with:
           node-version: '22'
       - name: PHP dependencies
+        id: php-deps
         run: |
           cp .env.example .env
           composer install --no-interaction --prefer-dist --no-scripts
@@ -77,22 +82,33 @@ jobs:
       - name: Connector integration tests
         run: vendor/bin/phpunit tests/Integration/Omcp
       - name: Frontend build
+        id: frontend
+        if: ${{ !cancelled() }}
         run: |
           npm install --global yarn@1.22.22
           yarn install --frozen-lockfile --non-interactive
           NODE_OPTIONS=--max-old-space-size=4096 yarn build:production
           test -s public/assets/manifest.json
-      - name: Install and route smoke checks
+      - name: Install, login and ownership smoke checks
+        if: ${{ !cancelled() && steps.php-deps.outcome == 'success' && steps.frontend.outcome == 'success' }}
         run: |
           bash -n omcp-ui-test-install.sh
-          php artisan migrate --force
+          test "$DB_DATABASE" = omcp_test_ci
+          php artisan migrate:fresh --seed --force
           php artisan route:list --path=api/omcp/v1
-          php artisan serve --host=127.0.0.1 --port=8080 > /tmp/omcp-http.log 2>&1 &
+          umask 077
+          export OMCP_SMOKE_PASSWORD="$(php -r 'echo bin2hex(random_bytes(24));')"
+          echo "::add-mask::$OMCP_SMOKE_PASSWORD"
+          export OMCP_SMOKE_FIXTURE="$(mktemp)"
+          php tests/Smoke/seed.php > "$OMCP_SMOKE_FIXTURE"
+          APP_ENV=local CACHE_STORE=file SESSION_DRIVER=file php artisan serve --host=127.0.0.1 --port=8080 > /tmp/omcp-http.log 2>&1 &
           pid=$!
-          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          trap 'kill "$pid" 2>/dev/null || true; rm -f "$OMCP_SMOKE_FIXTURE"' EXIT
           curl --retry 10 --retry-connrefused --retry-delay 2 --fail --silent --show-error http://127.0.0.1:8080/auth/login -o /tmp/omcp-login.html
           grep -q 'OMCP' /tmp/omcp-login.html
+          python3 tests/Smoke/http_smoke.py
       - name: Upload build assets
+        if: ${{ !cancelled() && steps.frontend.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: omcp-panel-assets

@@ -15,7 +15,6 @@
         <link rel="shortcut icon" href="/favicons/favicon.ico">
         <meta name="msapplication-config" content="/favicons/browserconfig.xml">
         <meta name="theme-color" content="#171329">
-        <link rel="stylesheet" href="{{ asset('css/omcp-admin.css') }}">
 
         @include('layouts.scripts')
 
@@ -35,6 +34,8 @@
             <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
             <![endif]-->
         @show
+        <link rel="stylesheet" href="{{ asset('css/omcp-admin.css') }}">
+        <link rel="icon" type="image/svg+xml" href="/assets/svgs/omcp.svg">
     </head>
     <body class="hold-transition skin-blue fixed sidebar-mini">
         <div class="wrapper">
